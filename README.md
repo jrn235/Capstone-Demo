@@ -1,4 +1,4 @@
-# Capstone-Demo
+# First Light
 
 Currently requires the pub_good_ztf_smallbodies.db sqlite file, placed in the same directory as the two .py files
 
