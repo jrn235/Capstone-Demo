@@ -10,14 +10,3 @@ To run:
 
         Will run the Plotly based server
 
-    python test.py
-    
-        Will run the PyPlot based server
-        
-## The dashExample.py file is a standalone file
-
-To run:
-        
-    python dashExample.py
-       
-        Will run the simple dashboard
