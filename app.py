@@ -6,6 +6,7 @@ from dash.dependencies import Input, Output, State
 import plotly.express as px
 import pandas as pd
 import sqlite3
+from lenspy import DynamicPlot
 
 con = sqlite3.connect('pub_good_ztf_smallbodies.db')
 
@@ -22,6 +23,10 @@ sigmapsfFig.update_layout(coloraxis_showscale=True)
 # distnr and magnr heatmap graph created
 distMagNRFig = px.density_heatmap(distMagNRDF, x="distnr", y="magnr", nbinsx=10, nbinsy=10)
 distMagNRFig.update_layout(coloraxis_showscale=True)
+
+# sigmap and magpsf scatter
+sigmapsfScatter = px.scatter(sigmapsfDF, x = "magpsf", y = "sigmapsf")
+sigmapsfScatterFig = DynamicPlot(sigmapsfScatter)
 
 sigmapsfFig.write_html("test.html")
 
@@ -44,6 +49,7 @@ def updateLayout(graphFig):
 
 updateLayout(sigmapsfFig)
 updateLayout(distMagNRFig)
+updateLayout(sigmapsfScatter)
 
 # Top nav bar styling
 # TOP_NAVBAR_STYLING = {
@@ -119,6 +125,9 @@ sidebar = html.Div(
                 dbc.NavItem(
                     dbc.NavLink("DistNR and MagNR", href="/distnr_magnr", id="distnr-link", active="exact",
                                 style={"color": "#AFEEEE"})),
+                dbc.NavItem(
+                    dbc.NavLink("Sigmapsf and Magpsf Scatter", href="/scatter", id="scatter", active="exact",
+                                style={"color": "#AFEEEE"})),
             ],
             # makes the sidebar vertical instead of horizontal
             vertical=True,
@@ -155,6 +164,7 @@ def toggle_navbar_collapse(n, is_open):
     Output("page-content", "children"),
     [Input("url", "pathname")]
 )
+
 def render_page_content(pathname):
     # if pathname is the main page show that main graph
     if pathname == "/":
@@ -203,7 +213,24 @@ def render_page_content(pathname):
                 figure=distMagNRFig
             )
         ]
+    elif pathname == "/scatter":
+        return [
+            html.H1(
+                children="Sigmapsf and Magpsf Scatter",
+                style = {
+                    "textAlign": "center",
+                    'color': colors['text']
+                }),
+            dcc.Graph(
+                id = "sigmapsf_magpsf_scatter",
+                figure = sigmapsfScatter
+            )
+        ]
 
+app.callback(
+    Output('sigmapsf_magpsf_scatter', "figure"),
+    [Input('sigmapsf_magpsf_scatter', 'relayoutData')]
+)(sigmapsfScatterFig.refine_plot)
 
 if __name__ == '__main__':
     app.run_server(debug=False, port=8051)
