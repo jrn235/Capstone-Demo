@@ -101,6 +101,7 @@ topNavBar = dbc.Navbar(
                 is_open=False,
                 navbar=True,
             ),
+            dbc.NavItem(dbc.NavLink("Login", href="/login", id="login-link", active="exact", style={"color": "#AFEEEE"})),
         ]
     ),
     color="dark",
@@ -224,6 +225,48 @@ def render_page_content(pathname):
             dcc.Graph(
                 id = "sigmapsf_magpsf_scatter",
                 figure = sigmapsfScatter
+            )
+        ]
+    elif pathname == "/login":
+        return [
+            html.H1(
+                children="Login Page",
+                style = {
+                    "textAlign": "center",
+                    'color': colors['text']
+                }),
+            html.Div([
+                dcc.Input(
+                    placeholder='Username',
+                    type='text',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Password',
+                    type='Password',
+                    value=''
+                ),
+                html.Button('Login', id='submit-val', n_clicks=0),
+                
+                html.P("Don't have an account?"),
+                html.P("Sign up Below"),
+                dcc.Input(
+                    placeholder='Email',
+                    type='email',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Username',
+                    type='text',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Password',
+                    type='Password',
+                    value=''
+                ),
+                html.Button('Submit', id='submit-val', n_clicks=0),
+            ],
             )
         ]
 
