@@ -73,7 +73,6 @@ CONTENT_STYLE = {
     'margin-left': '18rem',
     'margin-right': '2rem',
     'padding': '2rem 1rem',
-
 }
 
 # search bar creation
@@ -102,52 +101,14 @@ topNavBar = dbc.Navbar(
                 is_open=False,
                 navbar=True,
             ),
+            dbc.NavItem(dbc.NavLink("Login", href="/login", id="login-link", active="exact", style={"color": "#AFEEEE"})),
         ]
     ),
     color="dark",
     dark=True,
 )
 
-# sidebar creation
-sidebar = html.Div(
-    [
-        html.H1("First-Light Demo", className="display-4"),
-        html.Hr(),
-        html.P(
-            "Northern Arizona University", className="lead"
-        ),
-        dbc.Nav(
-            [
-                # background color of pills: #a0faff
-                dbc.NavItem(dbc.NavLink("Home", href="/", id="home-link", active="exact", style={"color": "#AFEEEE"})),
-                dbc.NavItem(
-                    dbc.NavLink("Account", href="/", id="account-link", active="exact", style={"color": "#AFEEEE"})),
-                dbc.NavItem(
-                    dbc.DropdownMenu(label="Graphs", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
-                                                    children=[dbc.DropdownMenuItem("Sigmapsf and Magpsf",
-                                                                                   href="/sigmapsf_magpsf"),
-                                                              dbc.DropdownMenuItem("DistNR and MagNR",
-                                                                                   href="/distnr_magnr"),
-                                                              dbc.DropdownMenuItem("Sigmapsf and Magpsf Scatter",
-                                                                                   href="/scatter"),
-                                                             ],
-                                     )),
-                dbc.NavItem(
-                    dbc.NavLink("Documentation", href="/", id="document-link", active="exact",
-                                style={"color": "#AFEEEE"})),
-                dbc.NavItem(
-                    dbc.NavLink("Links", href="/", id="links-link", active="exact", style={"color": "#AFEEEE"})),
 
-            ],
-            # makes the sidebar vertical instead of horizontal
-            vertical=True,
-            # gives the active link a blue highlight
-            pills=False,
-        ),
-    ],
-    style=SIDEBAR_STYLE,
-
-)
 
 content = html.Div(id="page-content", children=[], style=CONTENT_STYLE)
 
@@ -180,11 +141,22 @@ def render_page_content(pathname):
     if pathname == "/":
         return [
             html.H1(
-                children='Welcome to our Dashboard',
+                children='First Light Dash Demo',
                 style={
                     'textAlign': 'center',
-                    'color': "blue"
-                })
+                    'color': colors['text']
+                }),
+            html.Div(
+                children='Testing the graphing of the ZTF slice database with Dash and Plotly.',
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text']
+                }),
+
+            dcc.Graph(
+                id='example-graph',
+                figure=sigmapsfFig
+            )
         ]
     elif pathname == "/sigmapsf_magpsf":
         return [
@@ -223,6 +195,48 @@ def render_page_content(pathname):
             dcc.Graph(
                 id = "sigmapsf_magpsf_scatter",
                 figure = sigmapsfScatter
+            )
+        ]
+    elif pathname == "/login":
+        return [
+            html.H1(
+                children="Login Page",
+                style = {
+                    "textAlign": "center",
+                    'color': colors['text']
+                }),
+            html.Div([
+                dcc.Input(
+                    placeholder='Username',
+                    type='text',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Password',
+                    type='Password',
+                    value=''
+                ),
+                html.Button('Login', id='submit-val', n_clicks=0),
+                
+                html.P("Don't have an account?"),
+                html.P("Sign up Below"),
+                dcc.Input(
+                    placeholder='Email',
+                    type='email',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Username',
+                    type='text',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Password',
+                    type='Password',
+                    value=''
+                ),
+                html.Button('Submit', id='submit-val', n_clicks=0),
+            ],
             )
         ]
 
