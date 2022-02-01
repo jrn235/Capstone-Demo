@@ -13,6 +13,7 @@ con = sqlite3.connect('pub_good_ztf_smallbodies.db')
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
 # magpsf and sigmapsf select through SQL
 sigmapsfDF = pd.read_sql("SELECT magpsf, sigmapsf FROM ztf", con)
+
 # distnr and magnr selected through SQL
 distMagNRDF = pd.read_sql("SELECT distnr, magnr FROM ztf", con)
 
@@ -25,7 +26,7 @@ distMagNRFig = px.density_heatmap(distMagNRDF, x="distnr", y="magnr", nbinsx=10,
 distMagNRFig.update_layout(coloraxis_showscale=True)
 
 # sigmap and magpsf scatter
-sigmapsfScatter = px.scatter(sigmapsfDF, x = "magpsf", y = "sigmapsf")
+sigmapsfScatter = px.scatter(sigmapsfDF, x="magpsf", y="sigmapsf")
 sigmapsfScatterFig = DynamicPlot(sigmapsfScatter)
 
 sigmapsfFig.write_html("test.html")
@@ -51,11 +52,6 @@ updateLayout(sigmapsfFig)
 updateLayout(distMagNRFig)
 updateLayout(sigmapsfScatter)
 
-# Top nav bar styling
-# TOP_NAVBAR_STYLING = {
-#
-# }
-
 # sidebar styling
 SIDEBAR_STYLE = {
     'position': 'fixed',
@@ -74,6 +70,15 @@ CONTENT_STYLE = {
     'margin-right': '2rem',
     'padding': '2rem 1rem',
 }
+
+# Download Button
+download_button = dbc.Row(
+    [
+        html.Button("Download CSV", id="btn_csv"),
+        dcc.Download(id="download-dataframe-csv"),
+    ],
+    align="center",
+)
 
 # search bar creation
 search_bar = dbc.Row(
@@ -146,10 +151,21 @@ app.layout = html.Div([
     dcc.Location(id="url"),
     topNavBar,
     sidebar,
-    content
+    content,
+    download_button
 ])
 
 
+@app.callback(
+    Output("download-dataframe-csv", "data"),
+    Input("btn_csv", "n_clicks"),
+    prevent_initial_call=True,
+)
+def exportButton(n_clicks):
+    return dcc.send_data_frame(sigmapsfDF.to_csv, "sigmapsfDF.csv")
+
+
+# call back for top Navigation bar
 @app.callback(
     Output("topNavBar-collapse", "is_open"),
     [Input("topNavBar-toggler", "n_clicks")],
@@ -165,7 +181,6 @@ def toggle_navbar_collapse(n, is_open):
     Output("page-content", "children"),
     [Input("url", "pathname")]
 )
-
 def render_page_content(pathname):
     # if pathname is the main page show that main graph
     if pathname == "/":
@@ -218,13 +233,13 @@ def render_page_content(pathname):
         return [
             html.H1(
                 children="Sigmapsf and Magpsf Scatter",
-                style = {
+                style={
                     "textAlign": "center",
                     'color': colors['text']
                 }),
             dcc.Graph(
-                id = "sigmapsf_magpsf_scatter",
-                figure = sigmapsfScatter
+                id="sigmapsf_magpsf_scatter",
+                figure=sigmapsfScatter
             )
         ]
     elif pathname == "/login":
@@ -269,6 +284,49 @@ def render_page_content(pathname):
             ],
             )
         ]
+    elif pathname == "/login":
+        return [
+            html.H1(
+                children="Login Page",
+                style = {
+                    "textAlign": "center",
+                    'color': colors['text']
+                }),
+            html.Div([
+                dcc.Input(
+                    placeholder='Username',
+                    type='text',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Password',
+                    type='Password',
+                    value=''
+                ),
+                html.Button('Login', id='submit-val', n_clicks=0),
+                
+                html.P("Don't have an account?"),
+                html.P("Sign up Below"),
+                dcc.Input(
+                    placeholder='Email',
+                    type='email',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Username',
+                    type='text',
+                    value=''
+                ),
+                dcc.Input(
+                    placeholder='Password',
+                    type='Password',
+                    value=''
+                ),
+                html.Button('Submit', id='submit-val', n_clicks=0),
+            ],
+            )
+        ]
+
 
 app.callback(
     Output('sigmapsf_magpsf_scatter', "figure"),
