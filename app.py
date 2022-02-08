@@ -9,7 +9,9 @@ import sqlite3
 from lenspy import DynamicPlot
 
 con = sqlite3.connect('pub_good_ztf_smallbodies.db')
+cursor = con.cursor()
 
+entireDF = pd.read_sql("SELECT * FROM ztf", con)
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
 # magpsf and sigmapsf select through SQL
 sigmapsfDF = pd.read_sql("SELECT magpsf, sigmapsf FROM ztf", con)
@@ -28,8 +30,6 @@ distMagNRFig.update_layout(coloraxis_showscale=True)
 # sigmap and magpsf scatter
 sigmapsfScatter = px.scatter(sigmapsfDF, x="magpsf", y="sigmapsf")
 sigmapsfScatterFig = DynamicPlot(sigmapsfScatter)
-
-sigmapsfFig.write_html("test.html")
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 
@@ -70,6 +70,28 @@ CONTENT_STYLE = {
     'margin-right': '2rem',
     'padding': '2rem 1rem',
 }
+
+db_dropdown = html.Div([
+    dcc.Dropdown(
+        id='ztf-attribute-dropdown',
+        options=[{'label': i, 'value': i } for i in entireDF.keys()],
+        value='x',
+        clearable=False,
+        placeholder="Select an Attribute",
+        style={'float': 'right', 'width': '50%'}
+    ),
+
+    dcc.Dropdown(
+        id='ztf-dropdown',
+        options=[{'label': i, 'value': i } for i in entireDF.keys()],
+        value='y',
+        clearable=False,
+        placeholder="Select an Attribute",
+        style={'float': 'right', 'width': '50%'}
+    ),
+
+    html.Div(id='display selected-values')
+])
 
 # Download Button
 download_button = dbc.Row(
@@ -126,14 +148,23 @@ sidebar = html.Div(
                 # background color of pills: #a0faff
                 dbc.NavItem(dbc.NavLink("Home", href="/", id="home-link", active="exact", style={"color": "#AFEEEE"})),
                 dbc.NavItem(
-                    dbc.NavLink("Sigmapsf and Magpsf", href="/sigmapsf_magpsf", id="sigmap-link", active="exact",
+                    dbc.NavLink("Account", href="/", id="account-link", active="exact", style={"color": "#AFEEEE"})),
+                dbc.NavItem(
+                    dbc.DropdownMenu(label="Graphs", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
+                                     children=[dbc.DropdownMenuItem("Sigmapsf and Magpsf",
+                                                                    href="/sigmapsf_magpsf"),
+                                               dbc.DropdownMenuItem("DistNR and MagNR",
+                                                                    href="/distnr_magnr"),
+                                               dbc.DropdownMenuItem("Sigmapsf and Magpsf Scatter",
+                                                                    href="/scatter"),
+                                               ],
+                                     )),
+                dbc.NavItem(
+                    dbc.NavLink("Documentation", href="/", id="document-link", active="exact",
                                 style={"color": "#AFEEEE"})),
                 dbc.NavItem(
-                    dbc.NavLink("DistNR and MagNR", href="/distnr_magnr", id="distnr-link", active="exact",
-                                style={"color": "#AFEEEE"})),
-                dbc.NavItem(
-                    dbc.NavLink("Sigmapsf and Magpsf Scatter", href="/scatter", id="scatter", active="exact",
-                                style={"color": "#AFEEEE"})),
+                    dbc.NavLink("Links", href="/", id="links-link", active="exact", style={"color": "#AFEEEE"})),
+
             ],
             # makes the sidebar vertical instead of horizontal
             vertical=True,
@@ -151,9 +182,21 @@ app.layout = html.Div([
     dcc.Location(id="url"),
     topNavBar,
     sidebar,
+    db_dropdown,
     content,
     download_button
 ])
+
+@app.callback(
+    Output('ztf-dropdown', 'options'),
+    [Input('ztf-attribute-dropdown', 'value')]
+)
+
+def set_attribute_options(selected_attribute):
+    if type(selected_attribute) == 'str':
+        return [{'label': i, 'value': i} for i in entireDF[selected_attribute]]
+    else:
+        return [{'label': i, 'value': i} for attribute in selected_attribute for i in entireDF[attribute]]
 
 
 @app.callback(
