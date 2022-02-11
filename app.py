@@ -11,7 +11,7 @@ from lenspy import DynamicPlot
 con = sqlite3.connect('pub_good_ztf_smallbodies.db')
 cursor = con.cursor()
 
-entireDF = pd.read_sql("SELECT * FROM ztf", con)
+entireDF = pd.read_sql("PRAGMA table_info('ztf');", con)
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
 # magpsf and sigmapsf select through SQL
 sigmapsfDF = pd.read_sql("SELECT magpsf, sigmapsf FROM ztf", con)
@@ -74,7 +74,7 @@ CONTENT_STYLE = {
 db_dropdown = html.Div([
     dcc.Dropdown(
         id='ztf-attribute-dropdown',
-        options=[{'label': i, 'value': i } for i in entireDF.keys()],
+        options=[{'label': i, 'value': i } for i in entireDF["name"]],
         value='x',
         clearable=False,
         placeholder="Select an Attribute",
@@ -83,7 +83,7 @@ db_dropdown = html.Div([
 
     dcc.Dropdown(
         id='ztf-dropdown',
-        options=[{'label': i, 'value': i } for i in entireDF.keys()],
+        options=[{'label': i, 'value': i } for i in entireDF["name"]],
         value='y',
         clearable=False,
         placeholder="Select an Attribute",
@@ -194,9 +194,9 @@ app.layout = html.Div([
 
 def set_attribute_options(selected_attribute):
     if type(selected_attribute) == 'str':
-        return [{'label': i, 'value': i} for i in entireDF[selected_attribute]]
+        return [{'label': i, 'value': i} for i in entireDF["name"]]
     else:
-        return [{'label': i, 'value': i} for attribute in selected_attribute for i in entireDF[attribute]]
+        return [{'label': i, 'value': i} for attribute in selected_attribute for i in entireDF["name"]]
 
 
 @app.callback(
