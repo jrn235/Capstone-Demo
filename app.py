@@ -1,35 +1,23 @@
+from click import style
 import dash
-from dash import dcc
-from dash import html
+from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import plotly.express as px
 import pandas as pd
 import sqlite3
 from lenspy import DynamicPlot
+# import json
+# import time
 
-con = sqlite3.connect('pub_good_ztf_smallbodies.db')
-cursor = con.cursor()
+con = sqlite3.connect('pub_good_ztf_smallbodies.db', check_same_thread=False)
 
 entireDF = pd.read_sql("PRAGMA table_info('ztf');", con)
+catagories = entireDF['name'].values.tolist()
+
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
 # magpsf and sigmapsf select through SQL
-sigmapsfDF = pd.read_sql("SELECT magpsf, sigmapsf FROM ztf", con)
-
-# distnr and magnr selected through SQL
-distMagNRDF = pd.read_sql("SELECT distnr, magnr FROM ztf", con)
-
-# sigmap and magpsf heatmap graph created
-sigmapsfFig = px.density_heatmap(sigmapsfDF, x="magpsf", y="sigmapsf", nbinsx=10, nbinsy=10)
-sigmapsfFig.update_layout(coloraxis_showscale=True)
-
-# distnr and magnr heatmap graph created
-distMagNRFig = px.density_heatmap(distMagNRDF, x="distnr", y="magnr", nbinsx=10, nbinsy=10)
-distMagNRFig.update_layout(coloraxis_showscale=True)
-
-# sigmap and magpsf scatter
-sigmapsfScatter = px.scatter(sigmapsfDF, x="magpsf", y="sigmapsf")
-sigmapsfScatterFig = DynamicPlot(sigmapsfScatter)
+df = pd.DataFrame()
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 
@@ -46,11 +34,6 @@ def updateLayout(graphFig):
         paper_bgcolor=colors['background'],
         font_color=colors['text']
     )
-
-
-updateLayout(sigmapsfFig)
-updateLayout(distMagNRFig)
-updateLayout(sigmapsfScatter)
 
 # sidebar styling
 SIDEBAR_STYLE = {
@@ -70,28 +53,6 @@ CONTENT_STYLE = {
     'margin-right': '2rem',
     'padding': '2rem 1rem',
 }
-
-db_dropdown = html.Div([
-    dcc.Dropdown(
-        id='ztf-attribute-dropdown',
-        options=[{'label': i, 'value': i } for i in entireDF["name"]],
-        value='x',
-        clearable=False,
-        placeholder="Select an Attribute",
-        style={'float': 'right', 'width': '50%'}
-    ),
-
-    dcc.Dropdown(
-        id='ztf-dropdown',
-        options=[{'label': i, 'value': i } for i in entireDF["name"]],
-        value='y',
-        clearable=False,
-        placeholder="Select an Attribute",
-        style={'float': 'right', 'width': '50%'}
-    ),
-
-    html.Div(id='display selected-values')
-])
 
 # Download Button
 download_button = dbc.Row(
@@ -182,7 +143,6 @@ app.layout = html.Div([
     dcc.Location(id="url"),
     topNavBar,
     sidebar,
-    db_dropdown,
     content,
     download_button
 ])
@@ -192,20 +152,13 @@ app.layout = html.Div([
     [Input('ztf-attribute-dropdown', 'value')]
 )
 
-def set_attribute_options(selected_attribute):
-    if type(selected_attribute) == 'str':
-        return [{'label': i, 'value': i} for i in entireDF["name"]]
-    else:
-        return [{'label': i, 'value': i} for attribute in selected_attribute for i in entireDF["name"]]
-
-
 @app.callback(
     Output("download-dataframe-csv", "data"),
     Input("btn_csv", "n_clicks"),
     prevent_initial_call=True,
 )
 def exportButton(n_clicks):
-    return dcc.send_data_frame(sigmapsfDF.to_csv, "sigmapsfDF.csv")
+    return dcc.send_data_frame(df.to_csv, "sigmapsfDF.csv")
 
 
 # call back for top Navigation bar
@@ -222,159 +175,133 @@ def toggle_navbar_collapse(n, is_open):
 
 @app.callback(
     Output("page-content", "children"),
-    [Input("url", "pathname")]
+    Input("url", "pathname")
 )
 def render_page_content(pathname):
     # if pathname is the main page show that main graph
     if pathname == "/":
         return [
-            html.H1(
-                children='First Light Dash Demo',
-                style={
-                    'textAlign': 'center',
-                    'color': colors['text']
-                }),
-            html.Div(
-                children='Testing the graphing of the ZTF slice database with Dash and Plotly.',
-                style={
-                    'textAlign': 'center',
-                    'color': colors['text']
-                }),
+            html.Div([
 
-            dcc.Graph(
-                id='example-graph',
-                figure=sigmapsfFig
-            )
+            ])
         ]
-    elif pathname == "/sigmapsf_magpsf":
+    elif pathname == "/graph":
         return [
-            html.H1(
-                children='Sigmapsf and Magpsf',
-                style={
-                    'textAlign': 'center',
-                    'color': colors['text']
-                }),
-            dcc.Graph(
-                id='sigmapsf-magpsf-graph',
-                figure=sigmapsfFig
+            html.Div([
+                dcc.Dropdown(
+                    options = [{'label': i, 'value': i } for i in entireDF["name"]],
+                    value = 'sigmapsf', 
+                    id = 'xaxis-column'),
+                dcc.RadioItems(
+                    options = [
+                        {'label': 'Linear', 'value': 'Linear'},
+                        {'label': 'Log', 'value': 'Log'}],
+                    value = "Linear",
+                    id = 'xaxis-type'
+                )], style = {'width': '48%', 'display': 'inline-block'}
+            ),
+            html.Div([
+                dcc.Dropdown(
+                    options = [{'label': i, 'value': i } for i in entireDF["name"]], 
+                    value = 'magpsf', 
+                    id = 'yaxis-column'),
+                dcc.RadioItems(
+                    options = [
+                        {'label': 'Linear', 'value': 'Linear'},
+                        {'label': 'Log', 'value': 'Log'}],
+                    value = "Linear",
+                    id = 'yaxis-type'
+                )], style = {'width': '48%', 'float': 'right', 'display': 'inline-block'}
+            ),
+            dcc.Graph(id = "heatmap"),
+            html.Div(
+                html.Pre(id = 'click-data')
             )
         ]
-    elif pathname == "/distnr_magnr":
-        return [
-            html.H1(
-                children='DistNR and MagNR',
-                style={
-                    'textAlign': 'center',
-                    'color': colors['text']
-                }),
-            dcc.Graph(
-                id='distnr-magnr-graph',
-                figure=distMagNRFig
-            )
-        ]
+
     elif pathname == "/scatter":
         return [
-            html.H1(
-                children="Sigmapsf and Magpsf Scatter",
-                style={
-                    "textAlign": "center",
-                    'color': colors['text']
-                }),
-            dcc.Graph(
-                id="sigmapsf_magpsf_scatter",
-                figure=sigmapsfScatter
-            )
-        ]
-    elif pathname == "/login":
-        return [
-            html.H1(
-                children="Login Page",
-                style = {
-                    "textAlign": "center",
-                    'color': colors['text']
-                }),
             html.Div([
-                dcc.Input(
-                    placeholder='Username',
-                    type='text',
-                    value=''
-                ),
-                dcc.Input(
-                    placeholder='Password',
-                    type='Password',
-                    value=''
-                ),
-                html.Button('Login', id='submit-val', n_clicks=0),
-                
-                html.P("Don't have an account?"),
-                html.P("Sign up Below"),
-                dcc.Input(
-                    placeholder='Email',
-                    type='email',
-                    value=''
-                ),
-                dcc.Input(
-                    placeholder='Username',
-                    type='text',
-                    value=''
-                ),
-                dcc.Input(
-                    placeholder='Password',
-                    type='Password',
-                    value=''
-                ),
-                html.Button('Submit', id='submit-val', n_clicks=0),
-            ],
-            )
-        ]
-    elif pathname == "/login":
-        return [
-            html.H1(
-                children="Login Page",
-                style = {
-                    "textAlign": "center",
-                    'color': colors['text']
-                }),
+                dcc.Dropdown(
+                    options = [{'label': i, 'value': i } for i in entireDF["name"]],
+                    value = 'sigmapsf', 
+                    id = 'xaxis-column'),
+                dcc.RadioItems(
+                    options = [
+                        {'label': 'Linear', 'value': 'Linear'},
+                        {'label': 'Log', 'value': 'Log'}],
+                    value = "Linear",
+                    id = 'xaxis-type'
+                )], style = {'width': '48%', 'display': 'inline-block'}
+            ),
             html.Div([
-                dcc.Input(
-                    placeholder='Username',
-                    type='text',
-                    value=''
-                ),
-                dcc.Input(
-                    placeholder='Password',
-                    type='Password',
-                    value=''
-                ),
-                html.Button('Login', id='submit-val', n_clicks=0),
-                
-                html.P("Don't have an account?"),
-                html.P("Sign up Below"),
-                dcc.Input(
-                    placeholder='Email',
-                    type='email',
-                    value=''
-                ),
-                dcc.Input(
-                    placeholder='Username',
-                    type='text',
-                    value=''
-                ),
-                dcc.Input(
-                    placeholder='Password',
-                    type='Password',
-                    value=''
-                ),
-                html.Button('Submit', id='submit-val', n_clicks=0),
-            ],
+                dcc.Dropdown(
+                    options = [{'label': i, 'value': i } for i in entireDF["name"]], 
+                    value = 'magpsf', 
+                    id = 'yaxis-column'),
+                dcc.RadioItems(
+                    options = [
+                        {'label': 'Linear', 'value': 'Linear'},
+                        {'label': 'Log', 'value': 'Log'}],
+                    value = "Linear",
+                    id = 'yaxis-type'
+                )], style = {'width': '48%', 'float': 'right', 'display': 'inline-block'}
+            ),
+            dcc.Graph(id = "scatter"),
+            html.Div(
+                html.Pre(id = 'click-data')
             )
         ]
 
+    elif pathname == '/asteroid/*':
+        return [
+            html.Div([
+                html.H1(f"Asteroid")
+            ])
+        ]
 
-app.callback(
-    Output('sigmapsf_magpsf_scatter', "figure"),
-    [Input('sigmapsf_magpsf_scatter', 'relayoutData')]
-)(sigmapsfScatterFig.refine_plot)
+
+@app.callback(
+    Output('click-data', 'children'),
+    Input('scatter', 'clickData')
+)
+def click_scatter(clickData):
+    if(type(clickData) != None):
+        click_data = clickData['points'][0]['hovertext']
+        goto = dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid/{click_data}')
+        return goto
+
+@app.callback(
+    Output('heatmap', 'figure'),
+    Input('xaxis-column', 'value'),
+    Input('yaxis-column', 'value'))
+def update_heatmap(xaxis_column_name, yaxis_column_name):
+    df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name} FROM ztf", con)
+    fig = px.density_heatmap(df, x = xaxis_column_name, y = yaxis_column_name,
+                            nbinsx = 25, nbinsy = 25, text_auto = True)
+    
+    fig.update_xaxes(title=xaxis_column_name)
+    fig.update_yaxes(title=yaxis_column_name)
+
+    updateLayout(fig)
+    return fig
+
+@app.callback(
+    Output('scatter', 'figure'),
+    Input('xaxis-column', 'value'),
+    Input('yaxis-column', 'value'))
+def update_scatter(xaxis_column_name, yaxis_column_name):
+    df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name}, ssnamenr FROM ztf", con)
+
+    fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name,
+                        hover_name = 'ssnamenr')
+
+    fig.update_xaxes(title=xaxis_column_name)
+    fig.update_yaxes(title=yaxis_column_name)
+    plot = DynamicPlot(fig, max_points=1000)
+
+    updateLayout(fig)
+    return plot.fig
 
 if __name__ == '__main__':
     app.run_server(debug=False, port=8051)
