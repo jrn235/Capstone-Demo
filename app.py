@@ -5,10 +5,10 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import plotly.express as px
 import pandas as pd
+import pymongo
 import sqlite3
 from lenspy import DynamicPlot
-# import json
-# import time
+from constring import *
 
 # Login Dependencies
 # Manage database and users
@@ -55,12 +55,14 @@ def updateLayout(graphFig):
         font_color=colors['text']
     )
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], prevent_initial_callbacks=True)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], prevent_initial_callbacks=False)
 server = app.server
 app.config.suppress_callback_exceptions = True
 
-con = sqlite3.connect('pub_good_ztf_smallbodies.db', check_same_thread=False)
-cursor = con.cursor()
+constring = con_string
+
+client = pymongo.MongoClient(constring)
+ztf = client.ztf.ztf
 warnings.filterwarnings("ignore")
 
 ######################################################
@@ -101,8 +103,9 @@ def load_user(user_id):
     return Users.query.get(int(user_id))
 ###########################################
 
-entireDF = pd.read_sql("PRAGMA table_info('ztf');", con)
-catagories = entireDF['name'].values.tolist()
+entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 
+    'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr', 
+    'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID']
 
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
 # magpsf and sigmapsf select through SQL
@@ -282,7 +285,7 @@ def render_page_content(pathname):
         return [
             html.Div([
                 dcc.Dropdown(
-                    options = [{'label': i, 'value': i } for i in entireDF["name"]],
+                    options = [{'label': i, 'value': i } for i in entireDF],
                     value = 'sigmapsf',
                     id = 'xaxis-column'),
                 dcc.RadioItems(
@@ -295,7 +298,7 @@ def render_page_content(pathname):
             ),
             html.Div([
                 dcc.Dropdown(
-                    options = [{'label': i, 'value': i } for i in entireDF["name"]],
+                    options = [{'label': i, 'value': i } for i in entireDF],
                     value = 'magpsf',
                     id = 'yaxis-column'),
                 dcc.RadioItems(
@@ -316,7 +319,7 @@ def render_page_content(pathname):
         return [
             html.Div([
                 dcc.Dropdown(
-                    options = [{'label': i, 'value': i } for i in entireDF["name"]],
+                    options = [{'label': i, 'value': i } for i in entireDF],
                     value = 'sigmapsf',
                     id = 'xaxis-column'),
                 dcc.RadioItems(
@@ -329,7 +332,7 @@ def render_page_content(pathname):
             ),
             html.Div([
                 dcc.Dropdown(
-                    options = [{'label': i, 'value': i } for i in entireDF["name"]],
+                    options = [{'label': i, 'value': i } for i in entireDF],
                     value = 'magpsf',
                     id = 'yaxis-column'),
                 dcc.RadioItems(
@@ -346,11 +349,26 @@ def render_page_content(pathname):
             )
         ]
 
-    elif pathname == '/asteroid/*':
+    elif pathname == '/asteroid':
         return [
             html.Div([
-                html.H1(f"Asteroid")
-            ])
+                html.H1(id = 'asteroid')
+            ]),
+            html.Div([
+                dcc.Dropdown(
+                    options = [{'label': i, 'value': i } for i in entireDF],
+                    value = 'jd', 
+                    id = 'xaxis_ast')
+                    ], style = {'width': '48%', 'display': 'inline-block'}
+            ),
+            html.Div([
+                dcc.Dropdown(
+                    options = [{'label': i, 'value': i } for i in entireDF], 
+                    value = 'H', 
+                    id = 'yaxis_ast')
+                    ], style = {'width': '48%', 'float': 'right', 'display': 'inline-block'}
+            ),
+            dcc.Graph(id = "scatter_ast"),
         ]
 
     elif pathname == '/login':
@@ -386,9 +404,9 @@ def render_page_content(pathname):
     Input('scatter', 'clickData')
 )
 def click_scatter(clickData):
-    if(type(clickData) != None):
+    if(clickData != None):
         click_data = clickData['points'][0]['hovertext']
-        goto = dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid/{click_data}')
+        goto = dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid#{click_data}')
         return goto
 
 @app.callback(
@@ -396,7 +414,16 @@ def click_scatter(clickData):
     Input('xaxis-column', 'value'),
     Input('yaxis-column', 'value'))
 def update_heatmap(xaxis_column_name, yaxis_column_name):
-    df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name} FROM ztf", con)
+    filter_query = {}
+    ztf_query = {xaxis_column_name: 1, yaxis_column_name: 1}
+    ztf_heat = ztf.find(
+        filter_query,
+        ztf_query)
+
+    df = pd.DataFrame(ztf_heat, columns=(xaxis_column_name, yaxis_column_name))
+
+    print(df)
+
     fig = px.density_heatmap(df, x = xaxis_column_name, y = yaxis_column_name,
                             nbinsx = 25, nbinsy = 25, text_auto = True)
 
@@ -411,17 +438,51 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
     Input('xaxis-column', 'value'),
     Input('yaxis-column', 'value'))
 def update_scatter(xaxis_column_name, yaxis_column_name):
-    df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name}, ssnamenr FROM ztf", con)
+    filter_query = {}
+    ztf_query = {xaxis_column_name: 1, yaxis_column_name: 1}
+    scatter_mong = ztf.find(
+        filter_query,
+        ztf_query)
+
+    df = pd.DataFrame(scatter_mong)
 
     fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name,
                         hover_name = 'ssnamenr')
 
     fig.update_xaxes(title=xaxis_column_name)
     fig.update_yaxes(title=yaxis_column_name)
-    plot = DynamicPlot(fig, max_points=1000)
+    plot = DynamicPlot(fig, max_points=5000)
 
     updateLayout(fig)
     return plot.fig
+
+@app.callback(
+    Output('scatter_ast', 'figure'),
+    Input('xaxis_ast', 'value'),
+    Input('yaxis_ast', 'value'),
+    Input('url', 'hash'))
+def update_scatter_asteroid(xaxis_ast, yaxis_ast, hash):
+    scatter_mong = ztf.find(
+        { "ssnamenr": int(hash[1:]) },
+        { xaxis_ast, yaxis_ast }
+    )
+
+    df = pd.DataFrame(scatter_mong)
+
+    fig = px.scatter(df, x = xaxis_ast, y = yaxis_ast)
+    
+    fig.update_xaxes(title=xaxis_ast)
+    fig.update_yaxes(title=yaxis_ast)
+
+    updateLayout(fig)
+    return fig
+
+@app.callback(
+    Output('asteroid', 'children'),
+    Input('url', 'hash')
+)
+def generate_asteroid_page(hash):
+    return f'{hash[1:]}'
 
 # Login functionality
 @app.callback(
@@ -448,24 +509,24 @@ def insert_users(n_clicks, un, pw, cpw, em):
             	# Check if the email is valid
                 if re.fullmatch(regex, em):
 
-                	# Create a new user object for the database
-                	ins = Users_tbl.insert().values(username=un,  password=hashed_password, email=em)
+                    # Create a new user object for the database
+                    ins = Users_tbl.insert().values(username=un,  password=hashed_password, email=em)
 
-                	# Connect to the database
-                	user_con = engine.connect()
+                    # Connect to the database
+                    user_con = engine.connect()
 
-                	# Insert the new user into the database
-                	user_con.execute(ins)
+                    # Insert the new user into the database
+                    user_con.execute(ins)
 
-                	# Close the connection to the database
-               		user_con.close()
+                    # Close the connection to the database
+                    user_con.close()
 
-                	# Return to the home page
-                	return [html.Div([html.H2('Account Successfully Created')])]
+                    # Return to the home page
+                    return [html.Div([html.H2('Account Successfully Created')])]
                 else:
 
-                	# Email is not valid
-                	return [html.Div([html.H2('This email is not valid')])]
+                    # Email is not valid
+                    return [html.Div([html.H2('This email is not valid')])]
 
             # If the passwords do not match
             else:
