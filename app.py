@@ -10,21 +10,30 @@ import sqlite3
 from lenspy import DynamicPlot
 from constring import *
 
+
 # Login Dependencies
 # Manage database and users
 from sqlalchemy import Table, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import select
+from sqlalchemy.orm import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import login_user, logout_user, current_user, LoginManager, UserMixin
+
 # Manage password hashing
 from werkzeug.security import generate_password_hash, check_password_hash
+
 # Use to config server
 import warnings
 import configparser
 import os
 # Use for email check
 import re
+
+# For diplaying the data
+import numpy as np
+import json
+from dash import dash_table as dt
 
 # background color
 colors = {
@@ -55,15 +64,33 @@ def updateLayout(graphFig):
         font_color=colors['text']
     )
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], prevent_initial_callbacks=False)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 server = app.server
 app.config.suppress_callback_exceptions = True
 
 constring = con_string
 
-client = pymongo.MongoClient(constring)
-ztf = client.ztf.ztf
+#client = pymongo.MongoClient(constring)
+#ztf = client.ztf.ztf
+con = sqlite3.connect('pub_good_ztf_smallbodies.db', check_same_thread=False)
+cursor = con.cursor()
 warnings.filterwarnings("ignore")
+
+# Connect to the userData SQLite database file
+user_data_con = sqlite3.connect('userData.sqlite')
+user_data_engine = create_engine('sqlite:///userData.sqlite')
+user_data_db = SQLAlchemy()
+
+class UserData(user_data_db.Model):
+    id = user_data_db.Column(user_data_db.Integer, primary_key=True)
+    username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
+    asteroid_id = user_data_db.Column(user_data_db.String(50), unique=False)
+UserData_tbl = Table('user_data', UserData.metadata)
+
+# Creates the user_data table within the database
+def create_userData_table():
+    UserData.metadata.create_all(user_data_engine)
+create_userData_table()
 
 ######################################################
 ### Account, login, and logout functionality setup ###
@@ -71,6 +98,7 @@ user_con = sqlite3.connect('data.sqlite')
 engine = create_engine('sqlite:///data.sqlite')
 db = SQLAlchemy()
 config = configparser.ConfigParser()
+
 # Create users class for interacting with users table
 class Users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -78,11 +106,14 @@ class Users(db.Model):
     email = db.Column(db.String(50), unique=True)
     password = db.Column(db.String(80))
 Users_tbl = Table('users', Users.metadata)
+
 # Fuction to create table using Users class
 def create_users_table():
     Users.metadata.create_all(engine)
+
 # Create the table
 create_users_table()
+
 # Config the server to interact with the database
 # Secret Key is used for user sessions
 server.config.update(
@@ -90,6 +121,8 @@ server.config.update(
     SQLALCHEMY_DATABASE_URI='sqlite:///data.sqlite',
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
+
+
 db.init_app(server)
 login_manager = LoginManager()
 # This provides default implementations for the methods that Flask-#Login expects user objects to have
@@ -103,8 +136,8 @@ def load_user(user_id):
     return Users.query.get(int(user_id))
 ###########################################
 
-entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 
-    'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr', 
+entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf',
+    'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr',
     'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID']
 
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
@@ -112,12 +145,12 @@ entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf',
 df = pd.DataFrame()
 
 # Download Button
-download_button = dbc.Row(
+download_csv_button = dbc.Col(
     [
-        html.Button("Download CSV", id="btn_csv"),
+        html.Button("Download Data to CSV", id="btn_csv"),
         dcc.Download(id="download-dataframe-csv"),
     ],
-    align="center",
+    align="left",
 )
 
 # Search bar creation
@@ -157,10 +190,10 @@ topNavBar = dbc.Navbar(
 # Sidebar creation
 sidebar = html.Div(
     [
-        html.H1("Graphs", className="display-4"),
+        html.H1("SNAPS", className="display-4"),
         html.Hr(),
         html.P(
-            "Asteroid comparison through different attributes", className="lead"
+            "Solar System Notification Alert Processing System", className="lead"
         ),
         dbc.Nav(
             [
@@ -169,20 +202,18 @@ sidebar = html.Div(
                 dbc.NavItem(
                     dbc.NavLink("Account", href="/login", id="account-link", active="exact", style={"color": "#AFEEEE"})),
                 dbc.NavItem(
-                    dbc.DropdownMenu(label="Graphs", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
-                                     children=[dbc.DropdownMenuItem("Sigmapsf and Magpsf",
-                                                                    href="/sigmapsf_magpsf"),
-                                               dbc.DropdownMenuItem("DistNR and MagNR",
-                                                                    href="/distnr_magnr"),
-                                               dbc.DropdownMenuItem("Sigmapsf and Magpsf Scatter",
+                    dbc.DropdownMenu(label="Plots", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
+                                     children=[dbc.DropdownMenuItem("Heat maps",
+                                                                    href="/graph"),
+                                               dbc.DropdownMenuItem("Scatter plots",
                                                                     href="/scatter"),
                                                ],
                                      )),
                 dbc.NavItem(
-                    dbc.NavLink("Documentation", href="/", id="document-link", active="exact",
+                    dbc.NavLink("Documentation", href="/documentation", id="document-link", active="exact",
                                 style={"color": "#AFEEEE"})),
                 dbc.NavItem(
-                    dbc.NavLink("Links", href="/", id="links-link", active="exact", style={"color": "#AFEEEE"})),
+                    dbc.NavLink("Links", href="/otherlinks", id="links-link", active="exact", style={"color": "#AFEEEE"})),
 
             ],
             # makes the sidebar vertical instead of horizontal
@@ -222,16 +253,16 @@ login = html.Div([
 
 # Account page
 account = html.Div([
-            dcc.Location(id='user_account', refresh=True),
-            html.Div(id='account_output', children=[], style={}),  # end div
-            html.Div([
-                html.Br(),
-                html.Button(id='back-button', children='Go back', n_clicks=0)
-                ]),  # end div
-            html.Br(), html.Br(),
-            html.Button('Logout', id='logout_button', n_clicks=0),
-            html.Div(id='url_logout', children=[]) # end div
-        ])  # end div
+                    html.Br(),
+                    html.Button('My Asteroids', id='select_button', n_clicks=0),
+                    html.Br(), html.Br(),
+                    html.Div(id='selection', children=[]),
+                    html.Br(),
+                    html.Div(id='download-account-data-csv', children=[download_csv_button]),
+                    html.Br(),
+                    html.Button('Logout', id='logout_button', n_clicks=0),
+                    html.Div(id='url_logout', children=[]) # end div
+])
 
 content = html.Div(id="page-content", children=[], style=CONTENT_STYLE)
 
@@ -239,8 +270,7 @@ app.layout = html.Div([
     dcc.Location(id="url"),
     topNavBar,
     sidebar,
-    content,
-    download_button
+    content
 ])
 
 @app.callback(
@@ -253,9 +283,8 @@ app.layout = html.Div([
     Input("btn_csv", "n_clicks"),
     prevent_initial_call=True,
 )
-def exportButton(n_clicks):
-    return dcc.send_data_frame(df.to_csv, "sigmapsfDF.csv")
-
+def downloadDataToCSV(n_clicks):
+    return dcc.send_data_frame(df.to_csv, "myData.csv")
 
 # call back for top Navigation bar
 @app.callback(
@@ -267,7 +296,6 @@ def toggle_navbar_collapse(n, is_open):
     if n:
         return not is_open
     return is_open
-
 
 @app.callback(
     Output("page-content", "children"),
@@ -346,43 +374,40 @@ def render_page_content(pathname):
             dcc.Graph(id = "scatter"),
             html.Div(
                 html.Pre(id = 'click-data')
-            )
+            ),
+            download_csv_button
         ]
 
     elif pathname == '/asteroid':
         return [
             html.Div([
-                html.H1(id = 'asteroid')
+                html.Div(id = 'asteroid', children=[]),
+                html.Button(id='save-button', children='Save Asteroid', n_clicks=0),
+                html.Div(id='save-output', children=[])
             ]),
             html.Div([
                 dcc.Dropdown(
                     options = [{'label': i, 'value': i } for i in entireDF],
-                    value = 'jd', 
+                    value = 'jd',
                     id = 'xaxis_ast')
                     ], style = {'width': '48%', 'display': 'inline-block'}
             ),
             html.Div([
                 dcc.Dropdown(
-                    options = [{'label': i, 'value': i } for i in entireDF], 
-                    value = 'H', 
+                    options = [{'label': i, 'value': i } for i in entireDF],
+                    value = 'H',
                     id = 'yaxis_ast')
                     ], style = {'width': '48%', 'float': 'right', 'display': 'inline-block'}
             ),
             dcc.Graph(id = "scatter_ast"),
+            html.Br(),
+            html.Div(id='download-account-data-csv', children=[download_csv_button])
         ]
 
     elif pathname == '/login':
         if current_user.is_authenticated:
-            return [
-                    html.H1("Welcome " + current_user.username + "!"),
-                    html.Div([
-                        html.Br(),
-                        html.Button(id='back-button', children='Home', n_clicks=0)
-                        ]),  # end div
-                    html.Br(), html.Br(),
-                    html.Button('Logout', id='logout_button', n_clicks=0),
-                    html.Div(id='url_logout', children=[]) # end div
-                    ]
+            return [html.H1("Welcome " + current_user.username + "!"), account]
+                    
         else:
             return [login]
 
@@ -391,12 +416,142 @@ def render_page_content(pathname):
 
     elif pathname == "/account":
         if current_user.is_authenticated:
-            return [account]
+            return [html.H1("Welcome " + current_user.username + "!"), account]
         else:
             return [login]
 
+    elif pathname == "/documentation":
+        return [html.H1("Documentation Coming Soon")]
+
+    elif pathname == "/otherlinks":
+        return [html.H1("External Links Coming Soon")]
+
     else:
         return[html.H1('Error 404: Page not found')]
+
+@app.callback(
+    Output('save-output', 'children'),
+    Input('save-button', 'n_clicks'),
+    State('url', 'hash')
+)
+def save_asteroid(n_clicks, hash):
+    if(n_clicks > 0):
+        if(current_user.is_authenticated):
+            un = current_user.username
+            hash = hash.replace("#", "")
+
+            already_exists = select(UserData_tbl.c.id).where((UserData_tbl.c.username) == un).where((UserData_tbl.c.asteroid_id) == hash)
+            connection = user_data_engine.connect()
+            already_exists_result = connection.execute(already_exists)
+            check_result = already_exists_result.first()
+
+            if(check_result is None):
+                ins = UserData_tbl.insert().values(username=un, asteroid_id=hash)
+
+                # Insert the new user into the database
+                connection.execute(ins)
+
+                # Close the connection to the database
+                connection.close()
+
+                # Return to the home page
+                return (html.H2('Asteroid Saved!'))
+
+            else:
+                return (html.H2('You already have this asteroid saved!'))
+        else:
+            return (html.H2('You must be logged in to save asteroids!'))
+
+
+##########################################################################################################
+#   This function uses the input username to query the database for all asteroids that correspond to it
+#
+#       Output: Into a Div with the ID 'selection'
+#       Input: The username value entered into the select button when clicked
+#       State: Saves the username
+##########################################################################################################
+@app.callback(
+    Output('selection', 'children'),
+    [Input('select_button', 'n_clicks')]
+)
+def displayUserData(n_clicks):
+
+    if(n_clicks > 0):
+        # Query that elects the asteroid_id column values where the username column values match the inputted
+        # username
+        un = current_user.username
+        query = select(UserData_tbl.c.asteroid_id).where(UserData_tbl.c.username == un)
+
+        # Connect to the database
+        with user_data_engine.connect() as connection:
+
+            # Try to
+            try:
+                # Execute the query
+                result = connection.execute(query)
+
+            # There was an error
+            except Exception as e:
+                    print(e)
+
+            # The query executed
+            else:
+
+                # Create a list for the JSON data that needs to be passed into the dataframe
+                json_list = []
+
+                # Loop through each row queried
+                for row in result:
+
+                    # Create a list for the row data
+                    row_list = []
+
+                    # Set the row data into a tuple
+                    row_data = (row[0])
+
+                    # Append row data into the row list and take out the square brackets [ ] around the data
+                    row_list.append(row_data.replace("[", "").replace("]", ""))
+
+                    # JSON serialize the data
+                    jsonString = json.dumps(row_list)
+
+                    # Append the JSON string while taking out the square brackets [ ] and quotes " " around
+                    # the data
+                    json_list.append(jsonString.replace("[", "").replace("]", "").replace('"', ""))
+
+                # Disconnect from the database
+                result.close()
+
+                # Use numpy to put the JSON data into an Array
+                clean_up = np.array(json_list)
+
+                # Create a list for the asteroid links
+                link_array = []
+
+                # Loop through each value in the Array
+                for value in clean_up:
+
+                    # reformat the value to be an HTML link using an f string with HTML code and the value
+                    value = f"<a href='/asteroid#{value}'>{value}</a>"
+
+                    # Append the link into the link list
+                    link_array.append(value)
+
+                # Create a Dataframe using the link data
+                df = pd.DataFrame(link_array)
+
+                # Set the column name to be asteroid_id
+                df.columns = ['Asteroid ID']
+
+                # Set the columns to be a dictionary with the column name and value, and for it to contain
+                # HTML code
+                columns = [{"name": i, "id": i, "presentation": "markdown"} for i in df.columns]
+
+                # Set a data array to be the DataFrame split into dictionary records
+                data_array = df.to_dict('records')
+
+                # Return a Dash Datatable with the data centered
+                return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'paddingLeft': '25px', 'paddingTop': '20px'}, markdown_options={"html": True})
 
 
 @app.callback(
@@ -406,7 +561,7 @@ def render_page_content(pathname):
 def click_scatter(clickData):
     if(clickData != None):
         click_data = clickData['points'][0]['hovertext']
-        goto = dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid#{click_data}')
+        goto = html.H2(dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid#{click_data}'))
         return goto
 
 @app.callback(
@@ -438,20 +593,13 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
     Input('xaxis-column', 'value'),
     Input('yaxis-column', 'value'))
 def update_scatter(xaxis_column_name, yaxis_column_name):
-    filter_query = {}
-    ztf_query = {xaxis_column_name: 1, yaxis_column_name: 1}
-    scatter_mong = ztf.find(
-        filter_query,
-        ztf_query)
+    df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name}, id FROM ztf WHERE ssnamenr == 4000 OR ssnamenr == 5000", con)
 
-    df = pd.DataFrame(scatter_mong)
-
-    fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name,
-                        hover_name = 'ssnamenr')
+    fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name, hover_name = 'id', hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'})
 
     fig.update_xaxes(title=xaxis_column_name)
     fig.update_yaxes(title=yaxis_column_name)
-    plot = DynamicPlot(fig, max_points=5000)
+    plot = DynamicPlot(fig, max_points=1000)
 
     updateLayout(fig)
     return plot.fig
@@ -463,14 +611,14 @@ def update_scatter(xaxis_column_name, yaxis_column_name):
     Input('url', 'hash'))
 def update_scatter_asteroid(xaxis_ast, yaxis_ast, hash):
     scatter_mong = ztf.find(
-        { "ssnamenr": int(hash[1:]) },
+        { "id": int(hash[1:]) },
         { xaxis_ast, yaxis_ast }
     )
 
     df = pd.DataFrame(scatter_mong)
 
     fig = px.scatter(df, x = xaxis_ast, y = yaxis_ast)
-    
+
     fig.update_xaxes(title=xaxis_ast)
     fig.update_yaxes(title=yaxis_ast)
 
@@ -488,7 +636,9 @@ def generate_asteroid_page(hash):
 @app.callback(
     [Output('create_user', "children")],
     [Input('signup_button', 'n_clicks')],
-    [State('username', 'value'), State('password', 'value'), State('confirmpassword', 'value'), State('email', 'value')])
+    [State('username', 'value'), State('password', 'value'), State('confirmpassword', 'value'), State('email', 'value')],
+    prevent_initial_call=True,
+)
 def insert_users(n_clicks, un, pw, cpw, em):
 
     # Hash the password
@@ -506,7 +656,7 @@ def insert_users(n_clicks, un, pw, cpw, em):
             # Check if the password and confirm password values are the same
             if cpw == pw:
 
-            	# Check if the email is valid
+                # Check if the email is valid
                 if re.fullmatch(regex, em):
 
                     # Create a new user object for the database
@@ -531,7 +681,7 @@ def insert_users(n_clicks, un, pw, cpw, em):
             # If the passwords do not match
             else:
 
-               	# Print the error
+                # Print the error
                 return [html.Div([html.H2('Passwords do not match')])]
 
         # Which error occured?
@@ -606,4 +756,4 @@ def go_back(n_clicks):
         return '/'
 
 if __name__ == '__main__':
-    app.run_server(debug=False, port=8051)
+    app.run_server(debug=True, port=8051)
