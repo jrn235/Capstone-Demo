@@ -64,7 +64,7 @@ def updateLayout(graphFig):
         font_color=colors['text']
     )
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], prevent_initial_callbacks=False)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 server = app.server
 app.config.suppress_callback_exceptions = True
 
@@ -84,7 +84,7 @@ user_data_db = SQLAlchemy()
 class UserData(user_data_db.Model):
     id = user_data_db.Column(user_data_db.Integer, primary_key=True)
     username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
-    ssnamenr = user_data_db.Column(user_data_db.String(50), unique=False)
+    asteroid_id = user_data_db.Column(user_data_db.String(50), unique=False)
 UserData_tbl = Table('user_data', UserData.metadata)
 
 # Creates the user_data table within the database
@@ -110,7 +110,7 @@ Users_tbl = Table('users', Users.metadata)
 # Fuction to create table using Users class
 def create_users_table():
     Users.metadata.create_all(engine)
-    
+
 # Create the table
 create_users_table()
 
@@ -190,10 +190,10 @@ topNavBar = dbc.Navbar(
 # Sidebar creation
 sidebar = html.Div(
     [
-        html.H1("Graphs", className="display-4"),
+        html.H1("SNAPS", className="display-4"),
         html.Hr(),
         html.P(
-            "Asteroid comparison through different attributes", className="lead"
+            "Solar System Notification Alert Processing System", className="lead"
         ),
         dbc.Nav(
             [
@@ -202,20 +202,18 @@ sidebar = html.Div(
                 dbc.NavItem(
                     dbc.NavLink("Account", href="/login", id="account-link", active="exact", style={"color": "#AFEEEE"})),
                 dbc.NavItem(
-                    dbc.DropdownMenu(label="Graphs", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
-                                     children=[dbc.DropdownMenuItem("Sigmapsf and Magpsf",
-                                                                    href="/sigmapsf_magpsf"),
-                                               dbc.DropdownMenuItem("DistNR and MagNR",
-                                                                    href="/distnr_magnr"),
-                                               dbc.DropdownMenuItem("Sigmapsf and Magpsf Scatter",
+                    dbc.DropdownMenu(label="Plots", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
+                                     children=[dbc.DropdownMenuItem("Heat maps",
+                                                                    href="/graph"),
+                                               dbc.DropdownMenuItem("Scatter plots",
                                                                     href="/scatter"),
                                                ],
                                      )),
                 dbc.NavItem(
-                    dbc.NavLink("Documentation", href="/", id="document-link", active="exact",
+                    dbc.NavLink("Documentation", href="/documentation", id="document-link", active="exact",
                                 style={"color": "#AFEEEE"})),
                 dbc.NavItem(
-                    dbc.NavLink("Links", href="/", id="links-link", active="exact", style={"color": "#AFEEEE"})),
+                    dbc.NavLink("Links", href="/otherlinks", id="links-link", active="exact", style={"color": "#AFEEEE"})),
 
             ],
             # makes the sidebar vertical instead of horizontal
@@ -424,6 +422,12 @@ def render_page_content(pathname):
         else:
             return [login]
 
+    elif pathname == "/documentation":
+        return [html.H1("Documentation Coming Soon")]
+
+    elif pathname == "/otherlinks":
+        return [html.H1("External Links Coming Soon")]
+
     else:
         return[html.H1('Error 404: Page not found')]
 
@@ -437,13 +441,13 @@ def save_asteroid(n_clicks, hash):
         un = current_user.username
         hash = hash.replace("#", "")
 
-        already_exists = select(UserData_tbl.c.id).where((UserData_tbl.c.username) == un).where((UserData_tbl.c.ssnamenr) == hash)
+        already_exists = select(UserData_tbl.c.id).where((UserData_tbl.c.username) == un).where((UserData_tbl.c.asteroid_id) == hash)
         connection = user_data_engine.connect()
         already_exists_result = connection.execute(already_exists)
         check_result = already_exists_result.first()
 
         if(check_result is None):
-            ins = UserData_tbl.insert().values(username=un, ssnamenr=hash)
+            ins = UserData_tbl.insert().values(username=un, asteroid_id=hash)
 
             # Insert the new user into the database
             connection.execute(ins)
@@ -471,81 +475,82 @@ def save_asteroid(n_clicks, hash):
 )
 def displayUserData(n_clicks):
 
-    # Query that elects the ssnamenr column values where the username column values match the inputted
-    # username
-    un = current_user.username
-    query = select(UserData_tbl.c.ssnamenr).where(UserData_tbl.c.username == un)
+    if(n_clicks > 0):
+        # Query that elects the asteroid_id column values where the username column values match the inputted
+        # username
+        un = current_user.username
+        query = select(UserData_tbl.c.asteroid_id).where(UserData_tbl.c.username == un)
 
-    # Connect to the database
-    with user_data_engine.connect() as connection:
+        # Connect to the database
+        with user_data_engine.connect() as connection:
 
-        # Try to
-        try:
-            # Execute the query
-            result = connection.execute(query)
+            # Try to
+            try:
+                # Execute the query
+                result = connection.execute(query)
 
-        # There was an error
-        except Exception as e:
-                print(e)
+            # There was an error
+            except Exception as e:
+                    print(e)
 
-        # The query executed
-        else:
+            # The query executed
+            else:
 
-            # Create a list for the JSON data that needs to be passed into the dataframe
-            json_list = []
+                # Create a list for the JSON data that needs to be passed into the dataframe
+                json_list = []
 
-            # Loop through each row queried
-            for row in result:
+                # Loop through each row queried
+                for row in result:
 
-                # Create a list for the row data
-                row_list = []
+                    # Create a list for the row data
+                    row_list = []
 
-                # Set the row data into a tuple
-                row_data = (row[0])
+                    # Set the row data into a tuple
+                    row_data = (row[0])
 
-                # Append row data into the row list and take out the square brackets [ ] around the data
-                row_list.append(row_data.replace("[", "").replace("]", ""))
+                    # Append row data into the row list and take out the square brackets [ ] around the data
+                    row_list.append(row_data.replace("[", "").replace("]", ""))
 
-                # JSON serialize the data
-                jsonString = json.dumps(row_list)
+                    # JSON serialize the data
+                    jsonString = json.dumps(row_list)
 
-                # Append the JSON string while taking out the square brackets [ ] and quotes " " around
-                # the data
-                json_list.append(jsonString.replace("[", "").replace("]", "").replace('"', ""))
+                    # Append the JSON string while taking out the square brackets [ ] and quotes " " around
+                    # the data
+                    json_list.append(jsonString.replace("[", "").replace("]", "").replace('"', ""))
 
-            # Disconnect from the database
-            result.close()
+                # Disconnect from the database
+                result.close()
 
-            # Use numpy to put the JSON data into an Array
-            clean_up = np.array(json_list)
+                # Use numpy to put the JSON data into an Array
+                clean_up = np.array(json_list)
 
-            # Create a list for the asteroid links
-            link_array = []
+                # Create a list for the asteroid links
+                link_array = []
 
-            # Loop through each value in the Array
-            for value in clean_up:
+                # Loop through each value in the Array
+                for value in clean_up:
 
-            	# reformat the value to be an HTML link using an f string with HTML code and the value
-            	value = f"<a href='/asteroid#{value}'>{value}</a>"
+                	# reformat the value to be an HTML link using an f string with HTML code and the value
+                	value = f"<a href='/asteroid#{value}'>{value}</a>"
 
-                # Append the link into the link list
-            	link_array.append(value)
+                    # Append the link into the link list
+                	link_array.append(value)
 
-            # Create a Dataframe using the link data
-            df = pd.DataFrame(link_array)
+                # Create a Dataframe using the link data
+                df = pd.DataFrame(link_array)
 
-            # Set the column name to be ssnamenr
-            df.columns = ['SSNAMENR']
+                # Set the column name to be asteroid_id
+                df.columns = ['Asteroid ID']
 
-            # Set the columns to be a dictionary with the column name and value, and for it to contain
-            # HTML code
-            columns = [{"name": i, "id": i, "presentation": "markdown"} for i in df.columns]
+                # Set the columns to be a dictionary with the column name and value, and for it to contain
+                # HTML code
+                columns = [{"name": i, "id": i, "presentation": "markdown"} for i in df.columns]
 
-            # Set a data array to be the DataFrame split into dictionary records
-            data_array = df.to_dict('records')
+                # Set a data array to be the DataFrame split into dictionary records
+                data_array = df.to_dict('records')
 
-            # Return a Dash Datatable with the data centered
-            return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'paddingLeft': '25px', 'paddingTop': '20px'}, markdown_options={"html": True})
+                # Return a Dash Datatable with the data centered
+                return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'paddingLeft': '25px', 'paddingTop': '20px'}, markdown_options={"html": True})
 
 
 
@@ -556,7 +561,7 @@ def displayUserData(n_clicks):
 def click_scatter(clickData):
     if(clickData != None):
         click_data = clickData['points'][0]['hovertext']
-        goto = dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid#{click_data}')
+        goto = html.H2(dcc.Link(html.A(f'Go to {click_data}'), href = f'/asteroid#{click_data}'))
         return goto
 
 @app.callback(
@@ -632,7 +637,9 @@ def generate_asteroid_page(hash):
 @app.callback(
     [Output('create_user', "children")],
     [Input('signup_button', 'n_clicks')],
-    [State('username', 'value'), State('password', 'value'), State('confirmpassword', 'value'), State('email', 'value')])
+    [State('username', 'value'), State('password', 'value'), State('confirmpassword', 'value'), State('email', 'value')],
+    prevent_initial_call=True,
+)
 def insert_users(n_clicks, un, pw, cpw, em):
 
     # Hash the password
@@ -750,4 +757,4 @@ def go_back(n_clicks):
         return '/'
 
 if __name__ == '__main__':
-    app.run_server(debug=False, port=8051)
+    app.run_server(debug=True, port=8051)
