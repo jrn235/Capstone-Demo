@@ -4,8 +4,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 import time
+from constring import *
 
-constring = "mongodb://mjl79:NxMswiyz0oGQ4kT2XdqM@cmp4818.computers.nau.edu:27017/?authSource=admin"
+
+constring = con_string
 
 start = time.time()
 client = pymongo.MongoClient(constring)
