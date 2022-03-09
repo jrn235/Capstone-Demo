@@ -145,12 +145,12 @@ entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf',
 df = pd.DataFrame()
 
 # Download Button
-download_button = dbc.Row(
+download_csv_button = dbc.Col(
     [
-        html.Button("Download CSV", id="btn_csv"),
+        html.Button("Download Data to CSV", id="btn_csv"),
         dcc.Download(id="download-dataframe-csv"),
     ],
-    align="center",
+    align="left",
 )
 
 # Search bar creation
@@ -253,12 +253,16 @@ login = html.Div([
 
 # Account page
 account = html.Div([
-            dcc.Location(id='user_account', refresh=True),
-            html.Div(id='account_output', children=[], style={}),  # end div
-            html.Br(), html.Br(),
-            html.Button('Logout', id='logout_button', n_clicks=0),
-            html.Div(id='url_logout', children=[]) # end div
-        ])  # end div
+                    html.Br(),
+                    html.Button('My Asteroids', id='select_button', n_clicks=0),
+                    html.Br(), html.Br(),
+                    html.Div(id='selection', children=[]),
+                    html.Br(),
+                    html.Div(id='download-account-data-csv', children=[download_csv_button]),
+                    html.Br(),
+                    html.Button('Logout', id='logout_button', n_clicks=0),
+                    html.Div(id='url_logout', children=[]) # end div
+])
 
 content = html.Div(id="page-content", children=[], style=CONTENT_STYLE)
 
@@ -266,8 +270,7 @@ app.layout = html.Div([
     dcc.Location(id="url"),
     topNavBar,
     sidebar,
-    content,
-    download_button
+    content
 ])
 
 @app.callback(
@@ -280,8 +283,8 @@ app.layout = html.Div([
     Input("btn_csv", "n_clicks"),
     prevent_initial_call=True,
 )
-def exportButton(n_clicks):
-    return dcc.send_data_frame(df.to_csv, "sigmapsfDF.csv")
+def downloadDataToCSV(n_clicks):
+    return dcc.send_data_frame(df.to_csv, "myData.csv")
 
 # call back for top Navigation bar
 @app.callback(
@@ -371,7 +374,8 @@ def render_page_content(pathname):
             dcc.Graph(id = "scatter"),
             html.Div(
                 html.Pre(id = 'click-data')
-            )
+            ),
+            download_csv_button
         ]
 
     elif pathname == '/asteroid':
@@ -396,20 +400,14 @@ def render_page_content(pathname):
                     ], style = {'width': '48%', 'float': 'right', 'display': 'inline-block'}
             ),
             dcc.Graph(id = "scatter_ast"),
+            html.Br(),
+            html.Div(id='download-account-data-csv', children=[download_csv_button])
         ]
 
     elif pathname == '/login':
         if current_user.is_authenticated:
-            return [
-                    html.H1("Welcome " + current_user.username + "!"),
-                    html.Br(), html.Br(),
-                    html.Button('My Asteroids', id='select_button', n_clicks=0),
-                    html.Br(), html.Br(),
-                    html.Div(id='selection', children=[]),
-                    html.Br(),
-                    html.Button('Logout', id='logout_button', n_clicks=0),
-                    html.Div(id='url_logout', children=[]) # end div
-                    ]
+            return [html.H1("Welcome " + current_user.username + "!"), account]
+                    
         else:
             return [login]
 
@@ -418,7 +416,7 @@ def render_page_content(pathname):
 
     elif pathname == "/account":
         if current_user.is_authenticated:
-            return [account]
+            return [html.H1("Welcome " + current_user.username + "!"), account]
         else:
             return [login]
 
@@ -533,11 +531,11 @@ def displayUserData(n_clicks):
                 # Loop through each value in the Array
                 for value in clean_up:
 
-                	# reformat the value to be an HTML link using an f string with HTML code and the value
-                	value = f"<a href='/asteroid#{value}'>{value}</a>"
+                    # reformat the value to be an HTML link using an f string with HTML code and the value
+                    value = f"<a href='/asteroid#{value}'>{value}</a>"
 
                     # Append the link into the link list
-                	link_array.append(value)
+                    link_array.append(value)
 
                 # Create a Dataframe using the link data
                 df = pd.DataFrame(link_array)
@@ -658,7 +656,7 @@ def insert_users(n_clicks, un, pw, cpw, em):
             # Check if the password and confirm password values are the same
             if cpw == pw:
 
-            	# Check if the email is valid
+                # Check if the email is valid
                 if re.fullmatch(regex, em):
 
                     # Create a new user object for the database
@@ -683,7 +681,7 @@ def insert_users(n_clicks, un, pw, cpw, em):
             # If the passwords do not match
             else:
 
-               	# Print the error
+                # Print the error
                 return [html.Div([html.H2('Passwords do not match')])]
 
         # Which error occured?
