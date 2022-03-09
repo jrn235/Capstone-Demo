@@ -438,28 +438,31 @@ def render_page_content(pathname):
 )
 def save_asteroid(n_clicks, hash):
     if(n_clicks > 0):
-        un = current_user.username
-        hash = hash.replace("#", "")
+        if(current_user.is_authenticated):
+            un = current_user.username
+            hash = hash.replace("#", "")
 
-        already_exists = select(UserData_tbl.c.id).where((UserData_tbl.c.username) == un).where((UserData_tbl.c.asteroid_id) == hash)
-        connection = user_data_engine.connect()
-        already_exists_result = connection.execute(already_exists)
-        check_result = already_exists_result.first()
+            already_exists = select(UserData_tbl.c.id).where((UserData_tbl.c.username) == un).where((UserData_tbl.c.asteroid_id) == hash)
+            connection = user_data_engine.connect()
+            already_exists_result = connection.execute(already_exists)
+            check_result = already_exists_result.first()
 
-        if(check_result is None):
-            ins = UserData_tbl.insert().values(username=un, asteroid_id=hash)
+            if(check_result is None):
+                ins = UserData_tbl.insert().values(username=un, asteroid_id=hash)
 
-            # Insert the new user into the database
-            connection.execute(ins)
+                # Insert the new user into the database
+                connection.execute(ins)
 
-            # Close the connection to the database
-            connection.close()
+                # Close the connection to the database
+                connection.close()
 
-            # Return to the home page
-            return (html.H2('Asteroid Saved!'))
+                # Return to the home page
+                return (html.H2('Asteroid Saved!'))
 
+            else:
+                return (html.H2('You already have this asteroid saved!'))
         else:
-            return (html.H2('You already have this asteroid saved!'))
+            return (html.H2('You must be logged in to save asteroids!'))
 
 
 ##########################################################################################################
@@ -553,7 +556,6 @@ def displayUserData(n_clicks):
                 return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'paddingLeft': '25px', 'paddingTop': '20px'}, markdown_options={"html": True})
 
 
-
 @app.callback(
     Output('click-data', 'children'),
     Input('scatter', 'clickData')
@@ -595,8 +597,7 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
 def update_scatter(xaxis_column_name, yaxis_column_name):
     df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name}, id FROM ztf WHERE ssnamenr == 4000 OR ssnamenr == 5000", con)
 
-    fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name,
-                        hover_name = 'id')
+    fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name, hover_name = 'id', hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'})
 
     fig.update_xaxes(title=xaxis_column_name)
     fig.update_yaxes(title=yaxis_column_name)
