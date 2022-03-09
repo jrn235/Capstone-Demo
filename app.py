@@ -19,8 +19,10 @@ from sqlalchemy.sql import select
 from sqlalchemy.orm import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import login_user, logout_user, current_user, LoginManager, UserMixin
+
 # Manage password hashing
 from werkzeug.security import generate_password_hash, check_password_hash
+
 # Use to config server
 import warnings
 import configparser
@@ -78,11 +80,13 @@ warnings.filterwarnings("ignore")
 user_data_con = sqlite3.connect('userData.sqlite')
 user_data_engine = create_engine('sqlite:///userData.sqlite')
 user_data_db = SQLAlchemy()
+
 class UserData(user_data_db.Model):
     id = user_data_db.Column(user_data_db.Integer, primary_key=True)
     username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
     ssnamenr = user_data_db.Column(user_data_db.String(50), unique=False)
 UserData_tbl = Table('user_data', UserData.metadata)
+
 # Creates the user_data table within the database
 def create_userData_table():
     UserData.metadata.create_all(user_data_engine)
@@ -94,6 +98,7 @@ user_con = sqlite3.connect('data.sqlite')
 engine = create_engine('sqlite:///data.sqlite')
 db = SQLAlchemy()
 config = configparser.ConfigParser()
+
 # Create users class for interacting with users table
 class Users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -101,11 +106,14 @@ class Users(db.Model):
     email = db.Column(db.String(50), unique=True)
     password = db.Column(db.String(80))
 Users_tbl = Table('users', Users.metadata)
+
 # Fuction to create table using Users class
 def create_users_table():
     Users.metadata.create_all(engine)
+    
 # Create the table
 create_users_table()
+
 # Config the server to interact with the database
 # Secret Key is used for user sessions
 server.config.update(
