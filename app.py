@@ -15,6 +15,7 @@ from constring import *
 from sqlalchemy import Table, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import select
+from sqlalchemy.orm import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import login_user, logout_user, current_user, LoginManager, UserMixin
 # Manage password hashing
@@ -25,6 +26,11 @@ import configparser
 import os
 # Use for email check
 import re
+
+# For diplaying the data
+import numpy as np
+import json
+from dash import dash_table as dt
 
 # background color
 colors = {
@@ -61,9 +67,25 @@ app.config.suppress_callback_exceptions = True
 
 constring = con_string
 
-client = pymongo.MongoClient(constring)
-ztf = client.ztf.ztf
+#client = pymongo.MongoClient(constring)
+#ztf = client.ztf.ztf
+con = sqlite3.connect('pub_good_ztf_smallbodies.db', check_same_thread=False)
+cursor = con.cursor()
 warnings.filterwarnings("ignore")
+
+# Connect to the userData SQLite database file
+user_data_con = sqlite3.connect('userData.sqlite')
+user_data_engine = create_engine('sqlite:///userData.sqlite')
+user_data_db = SQLAlchemy()
+class UserData(user_data_db.Model):
+    id = user_data_db.Column(user_data_db.Integer, primary_key=True)
+    username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
+    ssnamenr = user_data_db.Column(user_data_db.String(50), unique=False)
+UserData_tbl = Table('user_data', UserData.metadata)
+# Creates the user_data table within the database
+def create_userData_table():
+    UserData.metadata.create_all(user_data_engine)
+create_userData_table()
 
 ######################################################
 ### Account, login, and logout functionality setup ###
@@ -90,6 +112,8 @@ server.config.update(
     SQLALCHEMY_DATABASE_URI='sqlite:///data.sqlite',
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
+
+
 db.init_app(server)
 login_manager = LoginManager()
 # This provides default implementations for the methods that Flask-#Login expects user objects to have
@@ -103,8 +127,8 @@ def load_user(user_id):
     return Users.query.get(int(user_id))
 ###########################################
 
-entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 
-    'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr', 
+entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf',
+    'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr',
     'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID']
 
 # [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
@@ -224,10 +248,6 @@ login = html.Div([
 account = html.Div([
             dcc.Location(id='user_account', refresh=True),
             html.Div(id='account_output', children=[], style={}),  # end div
-            html.Div([
-                html.Br(),
-                html.Button(id='back-button', children='Go back', n_clicks=0)
-                ]),  # end div
             html.Br(), html.Br(),
             html.Button('Logout', id='logout_button', n_clicks=0),
             html.Div(id='url_logout', children=[]) # end div
@@ -256,7 +276,6 @@ app.layout = html.Div([
 def exportButton(n_clicks):
     return dcc.send_data_frame(df.to_csv, "sigmapsfDF.csv")
 
-
 # call back for top Navigation bar
 @app.callback(
     Output("topNavBar-collapse", "is_open"),
@@ -267,7 +286,6 @@ def toggle_navbar_collapse(n, is_open):
     if n:
         return not is_open
     return is_open
-
 
 @app.callback(
     Output("page-content", "children"),
@@ -352,19 +370,21 @@ def render_page_content(pathname):
     elif pathname == '/asteroid':
         return [
             html.Div([
-                html.H1(id = 'asteroid')
+                html.Div(id = 'asteroid', children=[]),
+                html.Button(id='save-button', children='Save Asteroid', n_clicks=0),
+                html.Div(id='save-output', children=[])
             ]),
             html.Div([
                 dcc.Dropdown(
                     options = [{'label': i, 'value': i } for i in entireDF],
-                    value = 'jd', 
+                    value = 'jd',
                     id = 'xaxis_ast')
                     ], style = {'width': '48%', 'display': 'inline-block'}
             ),
             html.Div([
                 dcc.Dropdown(
-                    options = [{'label': i, 'value': i } for i in entireDF], 
-                    value = 'H', 
+                    options = [{'label': i, 'value': i } for i in entireDF],
+                    value = 'H',
                     id = 'yaxis_ast')
                     ], style = {'width': '48%', 'float': 'right', 'display': 'inline-block'}
             ),
@@ -375,11 +395,11 @@ def render_page_content(pathname):
         if current_user.is_authenticated:
             return [
                     html.H1("Welcome " + current_user.username + "!"),
-                    html.Div([
-                        html.Br(),
-                        html.Button(id='back-button', children='Home', n_clicks=0)
-                        ]),  # end div
                     html.Br(), html.Br(),
+                    html.Button('My Asteroids', id='select_button', n_clicks=0),
+                    html.Br(), html.Br(),
+                    html.Div(id='selection', children=[]),
+                    html.Br(),
                     html.Button('Logout', id='logout_button', n_clicks=0),
                     html.Div(id='url_logout', children=[]) # end div
                     ]
@@ -397,6 +417,127 @@ def render_page_content(pathname):
 
     else:
         return[html.H1('Error 404: Page not found')]
+
+@app.callback(
+    Output('save-output', 'children'),
+    Input('save-button', 'n_clicks'),
+    State('url', 'hash')
+)
+def save_asteroid(n_clicks, hash):
+    if(n_clicks > 0):
+        un = current_user.username
+        hash = hash.replace("#", "")
+
+        already_exists = select(UserData_tbl.c.id).where((UserData_tbl.c.username) == un).where((UserData_tbl.c.ssnamenr) == hash)
+        connection = user_data_engine.connect()
+        already_exists_result = connection.execute(already_exists)
+        check_result = already_exists_result.first()
+
+        if(check_result is None):
+            ins = UserData_tbl.insert().values(username=un, ssnamenr=hash)
+
+            # Insert the new user into the database
+            connection.execute(ins)
+
+            # Close the connection to the database
+            connection.close()
+
+            # Return to the home page
+            return (html.H2('Asteroid Saved!'))
+
+        else:
+            return (html.H2('You already have this asteroid saved!'))
+
+
+##########################################################################################################
+#   This function uses the input username to query the database for all asteroids that correspond to it
+#
+#       Output: Into a Div with the ID 'selection'
+#       Input: The username value entered into the select button when clicked
+#       State: Saves the username
+##########################################################################################################
+@app.callback(
+    Output('selection', 'children'),
+    [Input('select_button', 'n_clicks')]
+)
+def displayUserData(n_clicks):
+
+    # Query that elects the ssnamenr column values where the username column values match the inputted
+    # username
+    un = current_user.username
+    query = select(UserData_tbl.c.ssnamenr).where(UserData_tbl.c.username == un)
+
+    # Connect to the database
+    with user_data_engine.connect() as connection:
+
+        # Try to
+        try:
+            # Execute the query
+            result = connection.execute(query)
+
+        # There was an error
+        except Exception as e:
+                print(e)
+
+        # The query executed
+        else:
+
+            # Create a list for the JSON data that needs to be passed into the dataframe
+            json_list = []
+
+            # Loop through each row queried
+            for row in result:
+
+                # Create a list for the row data
+                row_list = []
+
+                # Set the row data into a tuple
+                row_data = (row[0])
+
+                # Append row data into the row list and take out the square brackets [ ] around the data
+                row_list.append(row_data.replace("[", "").replace("]", ""))
+
+                # JSON serialize the data
+                jsonString = json.dumps(row_list)
+
+                # Append the JSON string while taking out the square brackets [ ] and quotes " " around
+                # the data
+                json_list.append(jsonString.replace("[", "").replace("]", "").replace('"', ""))
+
+            # Disconnect from the database
+            result.close()
+
+            # Use numpy to put the JSON data into an Array
+            clean_up = np.array(json_list)
+
+            # Create a list for the asteroid links
+            link_array = []
+
+            # Loop through each value in the Array
+            for value in clean_up:
+
+            	# reformat the value to be an HTML link using an f string with HTML code and the value
+            	value = f"<a href='/asteroid#{value}'>{value}</a>"
+
+                # Append the link into the link list
+            	link_array.append(value)
+
+            # Create a Dataframe using the link data
+            df = pd.DataFrame(link_array)
+
+            # Set the column name to be ssnamenr
+            df.columns = ['SSNAMENR']
+
+            # Set the columns to be a dictionary with the column name and value, and for it to contain
+            # HTML code
+            columns = [{"name": i, "id": i, "presentation": "markdown"} for i in df.columns]
+
+            # Set a data array to be the DataFrame split into dictionary records
+            data_array = df.to_dict('records')
+
+            # Return a Dash Datatable with the data centered
+            return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'paddingLeft': '25px', 'paddingTop': '20px'}, markdown_options={"html": True})
+
 
 
 @app.callback(
@@ -438,20 +579,14 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
     Input('xaxis-column', 'value'),
     Input('yaxis-column', 'value'))
 def update_scatter(xaxis_column_name, yaxis_column_name):
-    filter_query = {}
-    ztf_query = {xaxis_column_name: 1, yaxis_column_name: 1}
-    scatter_mong = ztf.find(
-        filter_query,
-        ztf_query)
-
-    df = pd.DataFrame(scatter_mong)
+    df = pd.read_sql(f"SELECT {xaxis_column_name}, {yaxis_column_name}, id FROM ztf WHERE ssnamenr == 4000 OR ssnamenr == 5000", con)
 
     fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name,
-                        hover_name = 'ssnamenr')
+                        hover_name = 'id')
 
     fig.update_xaxes(title=xaxis_column_name)
     fig.update_yaxes(title=yaxis_column_name)
-    plot = DynamicPlot(fig, max_points=5000)
+    plot = DynamicPlot(fig, max_points=1000)
 
     updateLayout(fig)
     return plot.fig
@@ -463,14 +598,14 @@ def update_scatter(xaxis_column_name, yaxis_column_name):
     Input('url', 'hash'))
 def update_scatter_asteroid(xaxis_ast, yaxis_ast, hash):
     scatter_mong = ztf.find(
-        { "ssnamenr": int(hash[1:]) },
+        { "id": int(hash[1:]) },
         { xaxis_ast, yaxis_ast }
     )
 
     df = pd.DataFrame(scatter_mong)
 
     fig = px.scatter(df, x = xaxis_ast, y = yaxis_ast)
-    
+
     fig.update_xaxes(title=xaxis_ast)
     fig.update_yaxes(title=yaxis_ast)
 
