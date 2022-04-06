@@ -554,12 +554,16 @@ def click_scatter(clickData):
 	Output('scatter', 'figure'),
 	Input('xaxis-column', 'value'),
 	Input('yaxis-column', 'value'),
+	Input('xaxis-type', 'value'),
+	Input('yaxis-type', 'value')
 	)
-def update_scatter(xaxis_column_name, yaxis_column_name):
+def update_scatter(xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type):
 	# Larger query
 	# {"sigmapsf": {"$gte": 0.15, "$lte": 0.3}, "magpsf": {"$gte": 9, "$lte": 14}}
 	# Filter to speed up during demonstration
 
+	xlog = xaxis_type == "Log"
+	ylog = yaxis_type == "Log"
 
 	filter_query = {xaxis_column_name: {"$gte": 0.02, "$lte": 0.25}, yaxis_column_name: {"$gte": 9, "$lte": 14}}
 	ztf_scatter = ztf.find(
@@ -573,7 +577,10 @@ def update_scatter(xaxis_column_name, yaxis_column_name):
 			html.H1("No observations for ssnamenr of " + hash + "! Try another search.")
 		])
 
-	fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name, hover_name = 'ssnamenr', hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'})
+	fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name, 
+		hover_name = 'ssnamenr', 
+		hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
+		log_x = xlog, log_y = ylog)
 
 	fig.update_xaxes(title=xaxis_column_name)
 	fig.update_yaxes(title=yaxis_column_name)
