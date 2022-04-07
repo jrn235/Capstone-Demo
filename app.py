@@ -362,33 +362,53 @@ home_page = html.Div([
 
 scatterplot_page = html.Div([
 				html.Div([
+					html.H3("Specify X/Y range to build graph from. Change attributes from dropdown.")
+					], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
+				),
+				html.Div([
 					dcc.Dropdown(
 						options = [{'label': i, 'value': i } for i in entireDF],
 						value = 'ra',
-						id = 'xaxis-column'),
+						id = 'xaxis-column',
+						style={'margin-left':'-100px'}),
 					dcc.RadioItems(
 						options = [
 							{'label': 'Linear', 'value': 'Linear'},
 							{'label': 'Log', 'value': 'Log'}],
 						value = "Linear",
 						id = 'xaxis-type',
-						style={'color':'#AFEEEE'}
-					)], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+						style={'color':'#AFEEEE', 'margin-left':'-400px'}
+					)], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 				),
 				html.Div([
 					dcc.Dropdown(
 						options = [{'label': i, 'value': i } for i in entireDF],
 						value = 'dec',
-						id = 'yaxis-column'),
+						id = 'yaxis-column', style={"width":"200px", "margin-left":"50px"}),
 					dcc.RadioItems(
 						options = [
 							{'label': 'Linear', 'value': 'Linear'},
 							{'label': 'Log', 'value': 'Log'}],
 						value = "Linear",
 						id = 'yaxis-type',
-						style={'color':'#AFEEEE'}
+						style={'color':'#AFEEEE', "margin-left":"100px"}
 					)], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 				),
+				html.Div([
+					html.Div([
+						dcc.Input(id='x_lower_scatter', placeholder='X Lower Bound'),
+							dcc.Input(id='x_upper_scatter', placeholder='X Upper Bound')],
+							style={"display":"inline-block"}),
+
+					html.Div([
+						dcc.Input(id='y_lower_scatter', placeholder='Y Lower Bound'),
+						dcc.Input(id='y_upper_scatter', placeholder='Y Upper Bound')],
+						style={"display":"inline-block", "margin-left":"75px"}),
+
+					html.Br(),html.Br(),
+					html.Button(id='range_button', n_clicks=0, children='Build Graph', style={"margin-left":"10px", "background-color":"#AFEEEE", "border-radius":"12px"}),
+				    html.Br(),
+				], style={"display":"flex", "margin-left":"250px"}),
 				html.Br(),
 				dcc.Graph(id = "scatter", style={'width':'1000px', "margin-left":'200px'}),
 				html.Div(
@@ -451,8 +471,12 @@ dcc.Graph(id = "scatter_ast", style={'width':'1000px', "margin-left":'200px'}),
 html.Div(
 html.Pre(id = 'click-data-ast')),
 html.Br(),
-html.Button(id='save-button', children='Save Asteroid', n_clicks=0, style={'margin-left':'-100px'}),
-html.Div(id='save-output', children=[])
+html.Div([
+	html.Button(id='save-button', children='Save Asteroid', n_clicks=0, style={'float':'left', 'width':'150px', 'margin-top':'-25px', 'margin-left':'100px', 'height':'40px'}),
+	html.Div(id='save-output', children=[], style={'width':'400px', 'margin-left':'100px', 'margin-top':'-55px'}),
+
+
+	], style={'display':'flex', 'width':'900px', 'margin-left':'200px'})
 
 ])
 
@@ -570,38 +594,52 @@ def click_scatter(clickData):
 
 @app.callback(
 	Output('scatter', 'figure'),
+	Input('range_button', 'n_clicks'),
 	Input('xaxis-column', 'value'),
 	Input('yaxis-column', 'value'),
 	Input('xaxis-type', 'value'),
-	Input('yaxis-type', 'value')
+	Input('yaxis-type', 'value'),
+	Input('x_lower_scatter', 'value'),
+	Input('x_upper_scatter', 'value'),
+	Input('y_lower_scatter', 'value'),
+	Input('y_upper_scatter', 'value'),
+	prevent_initial_call=True
 	)
-def update_scatter(xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type):
-	# Larger query
-	# {"sigmapsf": {"$gte": 0.15, "$lte": 0.3}, "magpsf": {"$gte": 9, "$lte": 14}}
-	# Filter to speed up during demonstration
+def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up):
+	if(n_clicks > 0):
+		# Larger query
+		# {"sigmapsf": {"$gte": 0.15, "$lte": 0.3}, "magpsf": {"$gte": 9, "$lte": 14}}
+		# Filter to speed up during demonstration
 
-	xlog = xaxis_type == "Log"
-	ylog = yaxis_type == "Log"
+		x_low = float(x_low)
+		x_up = float(x_up)
+		y_low = float(y_low)
+		y_up = float(y_up)
 
-	filter_query = {xaxis_column_name: {"$gte": 0.02, "$lte": 0.25}, yaxis_column_name: {"$gte": 9, "$lte": 14}}
-	ztf_scatter = ztf.find(
-		filter_query
-	)
+		xlog = xaxis_type == "Log"
+		ylog = yaxis_type == "Log"
 
-	df = pd.DataFrame(ztf_scatter)
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}}
+		ztf_scatter = ztf.find(
+			filter_query
+		)
 
-	fig = px.scatter(df,
-			x = xaxis_column_name, y = yaxis_column_name,
-			hover_name = 'ssnamenr',
-			hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
-			log_x = xlog, log_y = ylog)
+		df = pd.DataFrame(ztf_scatter)
 
-	fig.update_xaxes(title=xaxis_column_name)
-	fig.update_yaxes(title=yaxis_column_name)
-	plot = DynamicPlot(fig, max_points=1000)
+		fig = px.scatter(df,
+				x = xaxis_column_name, y = yaxis_column_name,
+				hover_name = 'ssnamenr',
+				hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
+				log_x = xlog, log_y = ylog)
 
-	updateLayout(fig)
-	return plot.fig
+		fig.update_xaxes(title=xaxis_column_name)
+		fig.update_yaxes(title=yaxis_column_name)
+		plot = DynamicPlot(fig, max_points=1000)
+
+		updateLayout(fig)
+		return plot.fig
+	else:
+		raise PreventUpdate
 
 @app.callback(
 	Output('scatter_ast', 'figure'),
