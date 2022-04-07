@@ -3,6 +3,7 @@ import dash
 from dash import dcc, html, dash_table
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
 import plotly.express as px
 import pandas as pd
 import pymongo
@@ -48,7 +49,6 @@ SIDEBAR_STYLE = {
 	'bottom': 0,
 	'width': '16rem',
 	'padding': '2rem 1rem',
-	#'background-color': '#000173',
 	'color': 'white'
 }
 # sidebar content styling
@@ -80,7 +80,7 @@ def updateLayout(graphFig):
 	)
 
 #app = dash.Dash(__name__, requests_pathname_prefix='/snaps-dev/', external_stylesheets=[dbc.themes.FLATLY])
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], title='SNAPS')
 server = app.server
 app.config.suppress_callback_exceptions = True
 
@@ -190,7 +190,28 @@ def asteroid_search_bar(n_clicks, value):
 		if(value.startswith("ZTF")):
 			return f"/snaps-dev/observation#{value}"
 		else:
-			return f"/snaps-dev/asteroid#{value}"
+			# Still need to implement catch for anything other than a number
+			# being typed in. Sometimes the search bar jumps the gun and executes
+			# before button is it. Need to fix this.
+			#if(isinstance(value, str)):
+			#	return dash.no_update
+
+			# Queries to see if ssnamenr exists. Does not currently throw message
+			# to user saying "doesn't exist".
+			value = int(value)
+			if(value < 0):
+				raise PreventUpdate
+			filter_query = { "ssnamenr": value }
+			scatter_mong = ztf.find(
+				filter_query
+			)
+
+			df = pd.DataFrame(scatter_mong)
+
+			if(len(df) == 0):
+				raise PreventUpdate
+			else:
+				return f"/snaps-dev/asteroid#{value}"
 
 # Top nav bar creation
 topNavBar = dbc.Navbar(
@@ -243,15 +264,11 @@ sidebar = html.Div(
 				html.Br(),
 				dbc.NavItem(
 					dbc.DropdownMenu(label="Plots", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
-									 children=[dbc.DropdownMenuItem("Heat maps",
-																	href="/snaps-dev/graph"),
-											   dbc.DropdownMenuItem("Scatter plots",
-																	href="/snaps-dev/scatter"),
+									 children=[dbc.DropdownMenuItem("Heat maps", href="/snaps-dev/graph"),
+											   dbc.DropdownMenuItem("Scatter plots", href="/snaps-dev/scatter"),
 											   ],
 									 )),
-				html.Br(),
-				dbc.NavItem(
-					dbc.NavLink("Reference Links", href="/snaps-dev/otherlinks", id="links-link", active="exact", style={"color": "#AFEEEE"})),
+
 			],
 			# makes the sidebar vertical instead of horizontal
 			vertical=True,
@@ -267,7 +284,7 @@ sidebar = html.Div(
 create = html.Div([
 			html.H1('Sign Up', style={"color": "#AFEEEE"}),
 			html.P("Please fill in this form to create an account.", style={"color": "#AFEEEE"}),
-			dcc.Location(id='creation', refresh=True),
+			#dcc.Location(id='creation', pathname='/snaps-dev/signup', refresh=False),
 			html.Div(
 				[
 					dbc.Label("Username", style={"color": "#AFEEEE"}),
@@ -300,7 +317,7 @@ create = html.Div([
 
 # Login page
 login = html.Div([
-			dcc.Location(id='url_login', refresh=True),
+			#dcc.Location(id='url_login', pathname='/snaps-dev/login', refresh=False),
 			html.H2('''Please log in to continue:''', id='h1', style={"color": "#AFEEEE"}),
 
 			html.Div(
@@ -322,6 +339,7 @@ login = html.Div([
 
 # Account page
 account = html.Div([
+					#dcc.Location(id='url_account', pathname='/snaps-dev/account', refresh=False),
 					html.Br(),
 					html.Button('Logout', id='logout_button', n_clicks=0),
 					html.Br(), html.Br(),
@@ -333,7 +351,6 @@ account = html.Div([
 			],  style={'margin-left': '-950px'})
 
 home_page = html.Div([
-				html.H1("Home Page", style={"color": "#AFEEEE", 'margin-left':'200px', 'margin-bottom':'20px'}),
 				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image1.decode()), height='300', width='400'), style={'display':'flex', 'padding-right':'100px', 'float':'left', 'margin-left':'-150px'}),
 				html.Br(),
 				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image2.decode()), height='300', width='400'), style={'display':'flex', 'padding-left':'50px', 'margin-top':'-23px'}),
@@ -341,14 +358,7 @@ home_page = html.Div([
 				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image1.decode()), height='300', width='400'), style={'display':'flex', 'padding-right':'100px', 'float':'left', 'margin-left':'-150px'}),
 				html.Br(),
 				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image2.decode()), height='300', width='400'), style={'display':'flex', 'padding-left':'50px', 'margin-top':'-23px'}),
-			])
-
-other_links = html.Div([
-		html.H1("Here are a few reference links", style={"color": "#AFEEEE"}),
-		html.H3(dcc.Link(html.A('Github Repository'), href = 'https://github.com/jrn235/First-Light', target="_blank")),
-		html.H3(dcc.Link(html.A('Project Description'), href = 'https://www.ceias.nau.edu/cs/CS_Capstone/Projects/F21/Trilling_Gowanlock_capstone2021.pdf', target="_blank")),
-		html.H3(dcc.Link(html.A('Team Website'), href = 'https://ceias.nau.edu/capstone/projects/CS/2022/FirstLight/', target="_blank"))
-		])
+			], style={"margin-top":"30px"})
 
 scatterplot_page = html.Div([
 				html.Div([
@@ -383,7 +393,7 @@ scatterplot_page = html.Div([
 				dcc.Graph(id = "scatter", style={'width':'1000px', "margin-left":'200px'}),
 				html.Div(
 					html.Pre(id = 'click-data'),
-				)]  )
+				)])
 
 heatmap_page = html.Div([
 				html.Div([
@@ -447,17 +457,26 @@ html.Div(id='save-output', children=[])
 ])
 
 
+footer = html.Footer([
+    html.Div("Created by Team First Light 2022", id='footer-text', style={'float':'left', 'padding-left':'30px'}),
+    html.Div([
+    	html.A([html.Img(src=app.get_asset_url('GitHub-Mark-32px.png'), style={'display':'flex','height': '2rem', 'margin-left':'10px',})], href="https://github.com/jrn235/First-Light", target="_blank"),
+		html.A("Team Website", href="https://ceias.nau.edu/capstone/projects/CS/2022/FirstLight/", style={'display':'flex', 'margin-left':'10px'}, target="_blank"),
+    	html.A("Project Description", href="https://www.ceias.nau.edu/cs/CS_Capstone/Projects/F21/Trilling_Gowanlock_capstone2021.pdf", style={'margin-left':'10px','display':'flex'}, target="_blank")
+
+    ], style={'float':'right', 'display':'flex', 'padding-right':'30px', 'padding-bottom':'10px'})
+    ], id='footer', style={"padding":"15px", "border-top":"1px solid black"})
 
 
-
-
+#https://www.ceias.nau.edu/cs/CS_Capstone/Projects/F21/Trilling_Gowanlock_capstone2021.pdf
 content = html.Div(id="page-content", children=[], style=CONTENT_STYLE)
 
 app.layout = html.Div([
 	dcc.Location(id="url"),
 	topNavBar,
 	sidebar,
-	content
+	content,
+	footer
 ], style={'background-image':'linear-gradient(180deg, #000173, white)'})
 
 @app.callback(
@@ -471,7 +490,7 @@ def render_page_content(pathname):
 
 	elif pathname == "/snaps-dev/graph":
 			return [heatmap_page]
-			
+
 	elif pathname == "/snaps-dev/scatter":
 			return [scatterplot_page]
 
@@ -485,7 +504,7 @@ def render_page_content(pathname):
 
 	elif pathname == '/snaps-dev/login':
 		if current_user.is_authenticated:
-			return [html.H1("Welcome " + current_user.username + "!", style={'color': '#AFEEEE', 'margin-left':'-50px'}), account]
+			return dcc.Location(id='account_url', pathname='/snaps-dev/account')
 		else:
 			return [login]
 
@@ -496,10 +515,8 @@ def render_page_content(pathname):
 		if current_user.is_authenticated:
 			return [html.H1("Welcome " + current_user.username + "!", style={'color': '#AFEEEE'}), account]
 		else:
-			return [login]
+			return dcc.Location(id='login_url', pathname='/snaps-dev/login')
 
-	elif pathname == "/snaps-dev/otherlinks":
-		return [other_links]
 
 @app.callback(
 	Output('observation', 'children'),
@@ -514,7 +531,6 @@ def observation_page(hash):
 		)
 
 		original_df = pd.DataFrame(searched)
-
 
 		original_df = original_df.transpose()
 
@@ -549,6 +565,8 @@ def click_scatter(clickData):
 		click_data = clickData['points'][0]['hovertext']
 		goto = html.H2(dcc.Link(html.A(f'Go to {click_data}'), href = f'/snaps-dev/asteroid#{click_data}'))
 		return goto
+	else:
+		raise PreventUpdate
 
 @app.callback(
 	Output('scatter', 'figure'),
@@ -572,15 +590,11 @@ def update_scatter(xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type)
 
 	df = pd.DataFrame(ztf_scatter)
 
-	if(len(df) == 0):
-		return html.Div([
-			html.H1("No observations for ssnamenr of " + hash + "! Try another search.")
-		])
-
-	fig = px.scatter(df, x = xaxis_column_name, y = yaxis_column_name, 
-		hover_name = 'ssnamenr', 
-		hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
-		log_x = xlog, log_y = ylog)
+	fig = px.scatter(df,
+			x = xaxis_column_name, y = yaxis_column_name,
+			hover_name = 'ssnamenr',
+			hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
+			log_x = xlog, log_y = ylog)
 
 	fig.update_xaxes(title=xaxis_column_name)
 	fig.update_yaxes(title=yaxis_column_name)
@@ -596,7 +610,7 @@ def update_scatter(xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type)
 	Input('url', 'hash'))
 def update_scatter_asteroid(xaxis_ast, yaxis_ast, hash):
 	if(hash.startswith("#ZTF")):
-		return
+		raise PreventUpdate
 	filter_query = { "ssnamenr": int(hash[1:]) }
 	#ztf_query = { "ssnamenr": 1, xaxis_ast: 1, yaxis_ast: 1 }
 	scatter_mong = ztf.find(
@@ -621,6 +635,8 @@ def click_scatter_ast(clickData):
 		click_data = clickData['points'][0]['hovertext']
 		goto = html.H2(dcc.Link(html.A(f'Go to {click_data}'), href = f'/snaps-dev/observation#{click_data}'))
 		return goto
+	else:
+		raise PreventUpdate
 
 @app.callback(
 	Output('heatmap', 'figure'),
@@ -636,7 +652,7 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
 	df = pd.DataFrame(ztf_heat, columns=(xaxis_column_name, yaxis_column_name))
 
 	fig = px.density_heatmap(df, x = xaxis_column_name, y = yaxis_column_name,
-							nbinsx = 25, nbinsy = 25, text_auto = True)
+							nbinsx = 25, nbinsy = 25, text_auto = False)
 
 	fig.update_xaxes(title=xaxis_column_name)
 	fig.update_yaxes(title=yaxis_column_name)
@@ -682,6 +698,12 @@ def insert_users(n_clicks, un, pw, cpw, em):
 
 					# Close the connection to the database
 					user_con.close()
+
+					user = Users.query.filter_by(username=un).first()
+
+					# If the user exists
+					if user:
+						login_user(user)
 
 					# Return to the home page
 					return [dbc.Alert('Account Successfully created', color="success")]
@@ -745,7 +767,7 @@ def save_asteroid(n_clicks, hash):
 				connection.close()
 
 				# Return to the home page
-				return (html.H2('Asteroid Saved!'))
+				return [html.Br(), dbc.Alert("Asteroid Saved", color='success')]
 
 			else:
 				return [html.Br(), dbc.Alert("You already have this asteroid saved!", color='info')]
@@ -820,6 +842,12 @@ def displayUserData(n_clicks):
 				# Loop through each value in the Array
 				for value in clean_up:
 
+					## check if it is an ssnamnr or ZTF object
+
+					##
+
+					##
+
 					# reformat the value to be an HTML link using an f string with HTML code and the value
 					value = f"<a href='/snaps-dev/asteroid#{value}'>{value}</a>"
 
@@ -867,7 +895,7 @@ def login_to_account(n_clicks, input1, input2):
 		# If the username does not exist
 		else:
 			# Print the Error
-			return [html.Br(), dbc.Alert('Incorrect Username', color="danger")]
+			return [html.Br(), dbc.Alert('Username Doesn\'t Exist', color="danger")]
 
 
 # Callback for logout
