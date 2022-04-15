@@ -637,8 +637,10 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		plot = DynamicPlot(fig, max_points=1000)
 
 		updateLayout(fig)
+		n_clicks = 0
 		return plot.fig
 	else:
+		n_clicks = 0
 		raise PreventUpdate
 
 @app.callback(
