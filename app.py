@@ -1,3 +1,9 @@
+
+
+####################################################################################################################################################
+#	Dependencies 
+####################################################################################################################################################
+
 from click import style
 import dash
 from dash import dcc, html, dash_table
@@ -18,6 +24,7 @@ from sqlalchemy.sql import select
 from sqlalchemy.orm import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import login_user, logout_user, current_user, LoginManager, UserMixin
+from flask import session
 
 # Manage password hashing
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -34,7 +41,126 @@ import numpy as np
 import json
 from dash import dash_table as dt
 
+# For displaying the png's
 import base64
+
+
+
+####################################################################################################################################################
+#	Dash App Configuration 
+####################################################################################################################################################
+
+
+
+#app = dash.Dash(__name__, requests_pathname_prefix='/snaps-dev/', external_stylesheets=[dbc.themes.FLATLY])
+# Create Dash instance
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], title='SNAPS')
+
+# Create server instance
+server = app.server
+
+# Prevents initial errors for no callback input
+app.config.suppress_callback_exceptions = True
+
+# MongoDB Connection String
+constring = "mongodb://mjl79:NxMswiyz0oGQ4kT2XdqM@cmp4818.computers.nau.edu:27017/?authSource=admin"
+
+# Connect to the MongoDB
+client = pymongo.MongoClient(constring)
+
+# Create variable for easy access to the ZTF table
+ztf = client.ztf.ztf
+
+# Create variable for easy access to the Asteroids table
+derived = client.ztf.asteroids
+
+# Never print duplicate warnings
+warnings.filterwarnings("ignore")
+
+# Create and connect to the userData SQLite database file
+user_data_con = sqlite3.connect('userData.sqlite')
+user_data_engine = create_engine('sqlite:///userData.sqlite')
+user_data_db = SQLAlchemy()
+
+# Create the UserData Class for use in SQLAlchemy
+class UserData(user_data_db.Model):
+	id = user_data_db.Column(user_data_db.Integer, primary_key=True)
+	username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
+	asteroid_id = user_data_db.Column(user_data_db.String(50), unique=False)
+UserData_tbl = Table('user_data', UserData.metadata)
+
+# Create the user_data table within the SQLite database
+def create_userData_table():
+	UserData.metadata.create_all(user_data_engine)
+create_userData_table()
+
+
+
+# Create and connect to the users SQLite database file
+users_con = sqlite3.connect('users.sqlite')
+users_engine = create_engine('sqlite:///users.sqlite')
+users_db = SQLAlchemy()
+
+# Create a configuration objct for SQLite and SQLAlchemy interaction
+config = configparser.ConfigParser()
+
+# Create Users Class for interacting with users table
+class Users(users.db.Model):
+	id = users.db.Column(db.Integer, primary_key=True)
+	username = users.db.Column(db.String(15), unique=True, nullable=False)
+	email = users.db.Column(db.String(50), unique=True)
+	password = users.db.Column(db.String(80))
+Users_tbl = Table('users', Users.metadata)
+
+# Create users table within SQLite database
+def create_users_table():
+	Users.metadata.create_all(users_engine)
+create_users_table()
+
+# Config the server to interact with the database
+# Secret Key is used for user sessions
+server.config.update(
+	SECRET_KEY=os.urandom(12),
+	SQLALCHEMY_DATABASE_URI='sqlite:///data.sqlite',
+	SQLALCHEMY_TRACK_MODIFICATIONS=False
+)
+
+# Initialize users database server
+users.db.init_app(server)
+
+# Create login instance from Flask
+login_manager = LoginManager()
+
+# This provides default implementations for the methods that Flask-Login expects user objects to have
+login_manager.init_app(server)
+
+# Path from which the login manager will interact with
+login_manager.login_view = '/snaps-dev/login'
+
+# Allows for anonymous users
+class Users(UserMixin, Users):
+	pass
+
+# Callback to reload the user object
+@login_manager.user_loader
+def load_user(user_id):
+	return Users.query.get(int(user_id))
+
+
+# Name values for each asteroid attribute
+entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf',
+	'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr',
+	'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID', 'ltc']
+
+
+
+
+
+####################################################################################################################################################
+#	Initial dashboard pages
+####################################################################################################################################################
+
+
 
 # background color
 colors = {
@@ -60,110 +186,11 @@ CONTENT_STYLE = {
 	'text-align':'center',
 	'justifyContent':'center',
 	'display':'flex',
-
 }
 
 
 
-# Home page graphs as PNGs
-image_filename1 = 'hist1.png' # replace with your own image
-encoded_image1 = base64.b64encode(open(image_filename1, 'rb').read())
-
-image_filename2 = 'hist_linear.png' # replace with your own image
-encoded_image2 = base64.b64encode(open(image_filename2, 'rb').read())
-
-def updateLayout(graphFig):
-	return graphFig.update_layout(
-		plot_bgcolor=colors['background'],
-		paper_bgcolor=colors['background'],
-		font_color=colors['text']
-	)
-
-#app = dash.Dash(__name__, requests_pathname_prefix='/snaps-dev/', external_stylesheets=[dbc.themes.FLATLY])
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], title='SNAPS')
-server = app.server
-app.config.suppress_callback_exceptions = True
-
-constring = "mongodb://mjl79:NxMswiyz0oGQ4kT2XdqM@cmp4818.computers.nau.edu:27017/?authSource=admin"
-
-client = pymongo.MongoClient(constring)
-ztf = client.ztf.ztf
-
-warnings.filterwarnings("ignore")
-
-# Connect to the userData SQLite database file
-user_data_con = sqlite3.connect('userData.sqlite')
-user_data_engine = create_engine('sqlite:///userData.sqlite')
-user_data_db = SQLAlchemy()
-
-class UserData(user_data_db.Model):
-	id = user_data_db.Column(user_data_db.Integer, primary_key=True)
-	username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
-	asteroid_id = user_data_db.Column(user_data_db.String(50), unique=False)
-UserData_tbl = Table('user_data', UserData.metadata)
-
-# Creates the user_data table within the database
-def create_userData_table():
-	UserData.metadata.create_all(user_data_engine)
-create_userData_table()
-
-
-######################################################
-### Account, login, and logout functionality setup ###
-user_con = sqlite3.connect('data.sqlite')
-engine = create_engine('sqlite:///data.sqlite')
-db = SQLAlchemy()
-config = configparser.ConfigParser()
-
-# Create users class for interacting with users table
-class Users(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	username = db.Column(db.String(15), unique=True, nullable=False)
-	email = db.Column(db.String(50), unique=True)
-	password = db.Column(db.String(80))
-Users_tbl = Table('users', Users.metadata)
-
-# Fuction to create table using Users class
-def create_users_table():
-	Users.metadata.create_all(engine)
-
-# Create the table
-create_users_table()
-
-# Config the server to interact with the database
-# Secret Key is used for user sessions
-server.config.update(
-	SECRET_KEY=os.urandom(12),
-	SQLALCHEMY_DATABASE_URI='sqlite:///data.sqlite',
-	SQLALCHEMY_TRACK_MODIFICATIONS=False
-)
-
-
-db.init_app(server)
-login_manager = LoginManager()
-# This provides default implementations for the methods that Flask-#Login expects user objects to have
-login_manager.init_app(server)
-login_manager.login_view = '/snaps-dev/login'
-class Users(UserMixin, Users):
-	pass
-# Callback to reload the user object
-@login_manager.user_loader
-def load_user(user_id):
-	return Users.query.get(int(user_id))
-###########################################
-
-entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf',
-	'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr',
-	'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID', 'ltc']
-
-# [('ztf',), ('orbdat',), ('desigs',), ('other_desig',)]
-# magpsf and sigmapsf select through SQL
-df = pd.DataFrame()
-
-
-
-
-# Search Bar
+# Search Bar design
 search_bar = dbc.Row(
 	[
 		dbc.Col(dbc.Input(id= "search-field", type="search", placeholder="Search by ssnamenr")),
@@ -178,41 +205,6 @@ search_bar = dbc.Row(
 	align="center",
 )
 
-# Search Bar Callback
-@app.callback(
-	Output("url", "href"),
-	[Input("ast-search-button", "n_clicks")],
-	[Input("search-field", "value")],
-	prevent_initial_call=True
-)
-def asteroid_search_bar(n_clicks, value):
-	if n_clicks > 0:
-		if(value.startswith("ZTF")):
-			return f"/snaps-dev/observation#{value}"
-		else:
-			# Still need to implement catch for anything other than a number
-			# being typed in. Sometimes the search bar jumps the gun and executes
-			# before button is it. Need to fix this.
-			#if(isinstance(value, str)):
-			#	return dash.no_update
-
-			# Queries to see if ssnamenr exists. Does not currently throw message
-			# to user saying "doesn't exist".
-			value = int(value)
-			if(value < 0):
-				raise PreventUpdate
-			filter_query = { "ssnamenr": value }
-			scatter_mong = ztf.find(
-				filter_query
-			)
-
-			df = pd.DataFrame(scatter_mong)
-
-			if(len(df) == 0):
-				raise PreventUpdate
-			else:
-				return f"/snaps-dev/asteroid#{value}"
-
 # Top nav bar creation
 topNavBar = dbc.Navbar(
 	dbc.Container(
@@ -224,27 +216,17 @@ topNavBar = dbc.Navbar(
 				is_open=False,
 				navbar=True,
 			),
+			dbc.NavItem(dbc.NavLink("Sign Up", href="/snaps-dev/signup", id="signup-link", active="exact", style={"color": "#AFEEEE"})),
 			dbc.NavItem(dbc.NavLink("Login", href="/snaps-dev/login", id="login-link", active="exact", style={"color": "#AFEEEE"})),
-			dbc.NavItem(dbc.NavLink("Sign Up", href="/snaps-dev/signup", id="signup-link", active="exact", style={"color": "#AFEEEE"}))
+			dbc.NavItem(dbc.Button("Logout", outline=True, id='logout_button', n_clicks=0, style={"color": "#AFEEEE"}), id='logout', style={})
 		]
 	),
 	# this is intentionally wrong
 	color="000173",
 	dark=True,
 	#fixed="top",
-
 )
 
-# Callback for top Navigation bar
-@app.callback(
-	Output("topNavBar-collapse", "is_open"),
-	[Input("topNavBar-toggler", "n_clicks")],
-	[State("topNavBar_collapse", "is_open")],
-)
-def toggle_navbar_collapse(n, is_open):
-	if n:
-		return not is_open
-	return is_open
 
 # Sidebar creation
 sidebar = html.Div(
@@ -257,13 +239,13 @@ sidebar = html.Div(
 		dbc.Nav(
 			[
 				# background color of pills: #a0faff
-				dbc.NavItem(dbc.NavLink("Home", href="/snaps-dev/", id="home-link", active="exact", style={"color": "#AFEEEE"})),
+				dbc.NavItem(dbc.NavLink("Home", href="/snaps-dev/", id="home-link", active="exact", style={"color": "#AFEEEE", "-webkit-text-stroke":"0.2px black"})),
 				html.Br(),
 				dbc.NavItem(
-					dbc.NavLink("Account", href="/snaps-dev/account", id="account-link", active="exact", style={"color": "#AFEEEE"})),
+					dbc.NavLink("Account", href="/snaps-dev/account", id="account-link", style={"color": "#AFEEEE", "-webkit-text-stroke":"0.2px black"})),
 				html.Br(),
 				dbc.NavItem(
-					dbc.DropdownMenu(label="Plots", id="graph-link", style={"color": "#AFEEEE"}, nav=True,
+					dbc.DropdownMenu(label="Plots", id="graph-link", style={"-webkit-text-stroke":"0.2px black"}, nav=True,
 									 children=[dbc.DropdownMenuItem("Heat maps", href="/snaps-dev/graph"),
 											   dbc.DropdownMenuItem("Scatter plots", href="/snaps-dev/scatter"),
 											   ],
@@ -276,9 +258,10 @@ sidebar = html.Div(
 			pills=True,
 		),
 	],
-	style=SIDEBAR_STYLE,
-
+	style=SIDEBAR_STYLE
 )
+
+
 
 # Sign up page
 create = html.Div([
@@ -288,19 +271,19 @@ create = html.Div([
 			html.Div(
 				[
 					dbc.Label("Username", style={"color": "#AFEEEE"}),
-					dbc.Input(id="username", type="text", placeholder="Enter Username", maxLength=15),
+					dbc.Input(id="username", type="text", placeholder="Enter Username", maxLength=15, minLength=1),
 				]),
 			html.Br(),
 			html.Div(
 				[
 					dbc.Label("Password", style={"color": "#AFEEEE"}),
-					dbc.Input(id="password", type="password", placeholder="Enter Password"),
+					dbc.Input(id="password", type="password", placeholder="Enter Password", minLength=1),
 				]),
 			html.Br(),
 			html.Div(
 				[
 					dbc.Label("Confirm Password", style={"color": "#AFEEEE"}),
-					dbc.Input(id="confirmpassword", type="password", placeholder="Confirm Password"),
+					dbc.Input(id="confirmpassword", type="password", placeholder="Confirm Password", minLength=1),
 				]),
 			html.Br(),
 			html.Div(
@@ -314,6 +297,8 @@ create = html.Div([
 			html.Br(), html.Br(),
 			html.Div(id='create_user', children=[])
 		], style={'margin-top':'40px'})  # end div
+
+
 
 # Login page
 login = html.Div([
@@ -337,39 +322,63 @@ login = html.Div([
 			html.Div(id='login_output', children=[], style={})
 		], style={'margin-top':'100px'})  # end div
 
+
+
 # Account page
 account = html.Div([
 					#dcc.Location(id='url_account', pathname='/snaps-dev/account', refresh=False),
-					html.Br(),
-					html.Button('Logout', id='logout_button', n_clicks=0),
 					html.Br(), html.Br(),
-					html.Div(id='url_logout', children=[]),
-					html.Button('My Asteroids', id='select_button', n_clicks=0),
+					html.Button('My Asteroids', id='select_button', n_clicks=0, style={'textAlign':'center','margin-left':'120px', 'float':'left', 'margin-right':'50px','margin-left':'-100px', 'margin-top':'50px'}),
+					html.H4("Click the button to view your saved asteroids", style={'color': '#AFEEEE', 'float':'right', 'margin-top':'50px', 'margin-right':'100px'}),
 					html.Br(), html.Br(),
-					html.Div(id='selection', children=[]),
+					html.Div(id='selection', children=[], style={'float':'left', 'margin-right':'50px','margin-left':'-100px', 'margin-top':'30px'}),
 					html.Br()
-			],  style={'margin-left': '-950px'})
+			],  style={'margin-left': '-800px'})
+
+
+
+# Home page graphs as PNGs
+image_filename1 = 'obs_hist.png' # replace with your own image
+encoded_image1 = base64.b64encode(open(image_filename1, 'rb').read())
+
+image_filename2 = 'lcamp_hist.png' # replace with your own image
+encoded_image2 = base64.b64encode(open(image_filename2, 'rb').read())
+
+# Home page graphs as PNGs
+image_filename3 = 'lc_hist.png' # replace with your own image
+encoded_image3 = base64.b64encode(open(image_filename3, 'rb').read())
+
+image_filename4 = 'grColor_hist.png' # replace with your own image
+encoded_image4 = base64.b64encode(open(image_filename4, 'rb').read())
+
+
 
 home_page = html.Div([
 				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image1.decode()), height='300', width='400'), style={'display':'flex', 'padding-right':'100px', 'float':'left', 'margin-left':'-150px'}),
 				html.Br(),
 				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image2.decode()), height='300', width='400'), style={'display':'flex', 'padding-left':'50px', 'margin-top':'-23px'}),
 				html.Br(),
-				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image1.decode()), height='300', width='400'), style={'display':'flex', 'padding-right':'100px', 'float':'left', 'margin-left':'-150px'}),
+				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image3.decode()), height='300', width='400'), style={'display':'flex', 'padding-right':'100px', 'float':'left', 'margin-left':'-150px'}),
 				html.Br(),
-				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image2.decode()), height='300', width='400'), style={'display':'flex', 'padding-left':'50px', 'margin-top':'-23px'}),
+				html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image4.decode()), height='300', width='400'), style={'display':'flex', 'padding-left':'50px', 'margin-top':'-23px'}),
 			], style={"margin-top":"30px"})
+
+
 
 scatterplot_page = html.Div([
 				html.Div([
-					html.H3("Specify X/Y range to build graph from. Change attributes from dropdown.")
+					html.H3("Specify X/Y range to build graph from."),
+					html.Br(),
+					html.H3("Change attributes from dropdown to update scatter plot."),
 					], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 				),
+
+				html.Div(id="scatter_maxmin_table", children=[]),
 				html.Div([
 					dcc.Dropdown(
 						options = [{'label': i, 'value': i } for i in entireDF],
 						value = 'ra',
-						id = 'xaxis-column',
+						id = 'scatter-xaxis-column',
 						style={'margin-left':'-100px'}),
 					dcc.RadioItems(
 						options = [
@@ -384,7 +393,8 @@ scatterplot_page = html.Div([
 					dcc.Dropdown(
 						options = [{'label': i, 'value': i } for i in entireDF],
 						value = 'dec',
-						id = 'yaxis-column', style={"width":"200px", "margin-left":"50px"}),
+						id = 'scatter-yaxis-column',
+						style={"width":"200px", "margin-left":"50px"}),
 					dcc.RadioItems(
 						options = [
 							{'label': 'Linear', 'value': 'Linear'},
@@ -417,31 +427,37 @@ scatterplot_page = html.Div([
 
 heatmap_page = html.Div([
 				html.Div([
+					html.H3("Change attributes from dropdown to update heat map.")
+					], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
+				),
+				html.Div([
 					dcc.Dropdown(
 						options = [{'label': i, 'value': i } for i in entireDF],
 						value = 'ra',
-						id = 'xaxis-column'),
+						id = 'xaxis-column',
+						style={'margin-left':'-100px'}),
 					dcc.RadioItems(
 						options = [
 							{'label': 'Linear', 'value': 'Linear'},
 							{'label': 'Log', 'value': 'Log'}],
 						value = "Linear",
 						id = 'xaxis-type',
-						style={'color':'#AFEEEE'}
-					)], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+						style={'color':'#AFEEEE', 'margin-left':'-400px'}
+					)], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 				),
 				html.Div([
 					dcc.Dropdown(
 						options = [{'label': i, 'value': i } for i in entireDF],
 						value = 'dec',
-						id = 'yaxis-column'),
+						id = 'yaxis-column',
+						style={"width":"200px", "margin-left":"50px"}),
 					dcc.RadioItems(
 						options = [
 							{'label': 'Linear', 'value': 'Linear'},
 							{'label': 'Log', 'value': 'Log'}],
 						value = "Linear",
 						id = 'yaxis-type',
-						style={'color':'#AFEEEE'}
+						style={'color':'#AFEEEE', "margin-left":"100px"}
 					)], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 				),
 				html.Br(),
@@ -450,44 +466,48 @@ heatmap_page = html.Div([
 					html.Pre(id = 'click-data'),
 				)]  )
 
+
 asteroid_page = html.Div([
-	html.Div(id='asteroid', children=[]),
+    html.Div(id='asteroid', children=[]),
 html.Div([
     dcc.Dropdown(
         options = [{'label': i, 'value': i } for i in entireDF],
-        value = 'ra',
+        value = 'jd',
         id = 'xaxis_ast'),
      ], style={'width':'200px', 'display': 'inline-block', "margin-top":"50px", 'margin-bottom':'20px'}
 ),
 html.Div([
     dcc.Dropdown(
         options = [{'label': i, 'value': i } for i in entireDF],
-        value = 'dec',
+        value = 'H',
         id = 'yaxis_ast'),
     ], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 ),
+html.Div(id='ssnamenr_data', style={'display':'inline-block', 'margin-bottom':'20px', 'margin-left': '-150px', 'color':'white', 'float':'right', "margin-top":"50px", 'margin-right': '50px'}),
 html.Br(),
 dcc.Graph(id = "scatter_ast", style={'width':'1000px', "margin-left":'200px'}),
 html.Div(
 html.Pre(id = 'click-data-ast')),
 html.Br(),
 html.Div([
-	html.Button(id='save-button', children='Save Asteroid', n_clicks=0, style={'float':'left', 'width':'150px', 'margin-top':'-25px', 'margin-left':'100px', 'height':'40px'}),
-	html.Div(id='save-output', children=[], style={'width':'400px', 'margin-left':'100px', 'margin-top':'-55px'}),
-
-
-	], style={'display':'flex', 'width':'900px', 'margin-left':'200px'})
+    html.Button(id='save-button', children='Save Asteroid', n_clicks=0, style={'float':'left', 'width':'150px', 'margin-top':'-25px', 'margin-left':'100px', 'height':'40px'}),
+    html.Div(id='save-output', children=[], style={'width':'400px', 'margin-left':'100px', 'margin-top':'-55px'}),
+    ], style={'display':'flex', 'width':'900px', 'margin-left':'200px'})
 
 ])
 
 
 footer = html.Footer([
-    html.Div("Created by Team First Light 2022", id='footer-text', style={'float':'left', 'padding-left':'30px'}),
+	html.Div([
+		html.A([html.Img(src=app.get_asset_url('Northern_Arizona_Athletics_wordmark.svg.png'), style={'display':'flex','height': '2rem'})]),
+		html.Div("Created by Team First Light 2022", id='footer-text', style={'margin-left':'20px'}),
+
+		], style={'float':'left', 'padding-left':'30px','display':'flex'}),
+
     html.Div([
     	html.A([html.Img(src=app.get_asset_url('GitHub-Mark-32px.png'), style={'display':'flex','height': '2rem', 'margin-left':'10px',})], href="https://github.com/jrn235/First-Light", target="_blank"),
-		html.A("Team Website", href="https://ceias.nau.edu/capstone/projects/CS/2022/FirstLight/", style={'display':'flex', 'margin-left':'10px'}, target="_blank"),
-    	html.A("Project Description", href="https://www.ceias.nau.edu/cs/CS_Capstone/Projects/F21/Trilling_Gowanlock_capstone2021.pdf", style={'margin-left':'10px','display':'flex'}, target="_blank")
-
+    	html.A("Project Description", href="https://www.ceias.nau.edu/cs/CS_Capstone/Projects/F21/Trilling_Gowanlock_capstone2021.pdf", style={'color':'black','margin-left':'10px','display':'flex', "text-decoration": "none"}, target="_blank"),
+    	html.A("Team Website", href="https://ceias.nau.edu/capstone/projects/CS/2022/FirstLight/", style={'display':'flex', 'margin-left':'10px','color':'black', "text-decoration": "none"}, target="_blank")
     ], style={'float':'right', 'display':'flex', 'padding-right':'30px', 'padding-bottom':'10px'})
     ], id='footer', style={"padding":"15px", "border-top":"1px solid black"})
 
@@ -497,6 +517,7 @@ content = html.Div(id="page-content", children=[], style=CONTENT_STYLE)
 
 app.layout = html.Div([
 	dcc.Location(id="url"),
+	html.Div(id='url_logout', children=[]),
 	topNavBar,
 	sidebar,
 	content,
@@ -505,9 +526,10 @@ app.layout = html.Div([
 
 @app.callback(
 	Output("page-content", "children"),
-	Input("url", "pathname")
+	Input("url", "pathname"),
+	Input("url", "hash")
 )
-def render_page_content(pathname):
+def render_page_content(pathname, hash):
 	# if pathname is the main page show that main graph
 	if pathname == "/snaps-dev/":
 		return [home_page]
@@ -516,7 +538,7 @@ def render_page_content(pathname):
 			return [heatmap_page]
 
 	elif pathname == "/snaps-dev/scatter":
-			return [scatterplot_page]
+		return [scatterplot_page]
 
 	elif pathname == '/snaps-dev/observation':
 		return [
@@ -524,7 +546,7 @@ def render_page_content(pathname):
 		]
 
 	elif pathname == '/snaps-dev/asteroid':
-		return [asteroid_page]
+		return [html.Div([html.Br(),html.H3(f"Asteroid {hash}",style={'color':'#AFEEEE', 'margin-right':'525px'}), asteroid_page])]
 
 	elif pathname == '/snaps-dev/login':
 		if current_user.is_authenticated:
@@ -537,170 +559,474 @@ def render_page_content(pathname):
 
 	elif pathname == "/snaps-dev/account":
 		if current_user.is_authenticated:
-			return [html.H1("Welcome " + current_user.username + "!", style={'color': '#AFEEEE'}), account]
+			return [html.H1("Welcome " + current_user.username + "!", style={'color': '#AFEEEE', 'float':'left', 'margin-right':'600px'}), account]
 		else:
 			return dcc.Location(id='login_url', pathname='/snaps-dev/login')
 
 
+
+
+
+####################################################################################################################################################
+# 	Functionality
+####################################################################################################################################################
+
+
+####################################################################################################################################################
+#	Plotting functions 
+####################################################################################################################################################
+
+
+
+##########################################################################################################
+#   This function updates the plot layout to match eaxch color to a value 
+#
+#       Output: Updated plot layout
+#       Input: Plot figure
+##########################################################################################################
+def updateLayout(graphFig):
+	return graphFig.update_layout(
+		plot_bgcolor=colors['background'],
+		paper_bgcolor=colors['background'],
+		font_color=colors['text']
+	)
+
+
+
+##########################################################################################################
+#   This function updates the heatmap for which attributes will be plotted on the X and Y axis
+#
+#       Output: Heatmap plot
+#       Input: X and Y values
+##########################################################################################################
 @app.callback(
-	Output('observation', 'children'),
-	Input('url', 'hash')
-)
-def observation_page(hash):
-	if(hash.startswith("#ZTF")):
-		hash = hash.replace("#", "")
-		filter_query = { "id": hash }
-		searched = ztf.find(
-			filter_query
-		)
+	Output('heatmap', 'figure'),
+	Input('xaxis-column', 'value'),
+	Input('yaxis-column', 'value'))
+def update_heatmap(xaxis_column_name, yaxis_column_name):
 
-		original_df = pd.DataFrame(searched)
+	# The default plot shows "ra" on the X axis and "dec" on the Y axis
+	filter_query = {"ra": {"$gte": 0, "$lte": 30}, "dec": {"$gte": 0, "$lte": 30}}
 
-		original_df = original_df.transpose()
+	# Create a MongoDB query for the new X and Y values
+	ztf_query = {xaxis_column_name: 1, yaxis_column_name: 1}
 
-		dict_list = []
-		# need to fix this line, maybe df.items
-		for index, row in original_df.itertuples():
+	# Search for the data
+	ztf_heat = ztf.find(
+		filter_query,
+		ztf_query)
 
-			dict_data = (str(index), str(row))
-			dict_list.append(dict_data)
+	# Put the resulting data into a dataframe
+	df = pd.DataFrame(ztf_heat, columns=(xaxis_column_name, yaxis_column_name))
 
-		df_dict = dict(dict_list)
+	# Create a heatmap figure with the X and Y values
+	plot = px.density_heatmap(df, x = xaxis_column_name, y = yaxis_column_name,
+							nbinsx = 25, nbinsy = 25, text_auto = False)
 
-		transposed_df = pd.DataFrame.from_dict(df_dict, orient='index')
+	# Update the X axis
+	plot.update_xaxes(title=xaxis_column_name)
 
-		transposed_df = transposed_df.reset_index()
+	# Update the Y axis
+	plot.update_yaxes(title=yaxis_column_name)
 
-		transposed_df.columns = ['Attribute','Value']
-		columns = [{"name": i, "id": i} for i in transposed_df.columns]
+	# Update the plot
+	updateLayout(plot)
 
-		dataframe = transposed_df.to_dict('records')
-
-		return html.Div([html.H3(f"Observation {hash}",style={'color':'#AFEEEE'}), html.Br(), dt.DataTable(data=dataframe, columns = columns, style_as_list_view=True, style_header={'textAlign': 'center', 'border':'1px rgb(10, 41, 122)', 'backgroundColor': 'transparent','fontWeight': 'bold', 'color':'#AFEEEE'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'border':'none','fontWeight':'bold','color':'black', 'backgroundColor': 'rgba(255,255,255,0.5)', 'paddingLeft': '25px', 'paddingTop': '20px', 'textAlign':'center'}, export_format='csv')])
-
+	# Return the plot
+	return plot
 
 
-@app.callback(
-	Output('click-data', 'children'),
-	Input('scatter', 'clickData')
-)
-def click_scatter(clickData):
-	if(clickData != None):
-		click_data = clickData['points'][0]['hovertext']
-		goto = html.H2(dcc.Link(html.A(f'Go to {click_data}'), href = f'/snaps-dev/asteroid#{click_data}'))
-		return goto
-	else:
-		raise PreventUpdate
 
+##########################################################################################################
+#   This function updates the main scatter plot 
+#
+#       Output: Scatter plot
+#       Input: X and Y values, upper and lower bounds for X and Y values, X and Y axis types, Scatter
+#				column values, and an n_clicks value 
+##########################################################################################################
 @app.callback(
 	Output('scatter', 'figure'),
 	Input('range_button', 'n_clicks'),
-	Input('xaxis-column', 'value'),
-	Input('yaxis-column', 'value'),
+	Input('scatter-xaxis-column', 'value'),
+	Input('scatter-yaxis-column', 'value'),
 	Input('xaxis-type', 'value'),
 	Input('yaxis-type', 'value'),
 	Input('x_lower_scatter', 'value'),
 	Input('x_upper_scatter', 'value'),
 	Input('y_lower_scatter', 'value'),
 	Input('y_upper_scatter', 'value'),
-	prevent_initial_call=True
+	prevent_initial_call = True
 	)
 def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up):
-	if(n_clicks > 0):
+
+	# Gather a list of all props that triggered the callback
+	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+
+	# Check if the range button triggerd the callback
+	if 'range_button' in changed_id:
 		# Larger query
 		# {"sigmapsf": {"$gte": 0.15, "$lte": 0.3}, "magpsf": {"$gte": 9, "$lte": 14}}
-		# Filter to speed up during demonstration
 
+		# Lower bound for X axis
 		x_low = float(x_low)
+
+		# Upper bound for X axis
 		x_up = float(x_up)
+
+		# Lower bound for Y axis
 		y_low = float(y_low)
+
+		# Upper bound for Y axis
 		y_up = float(y_up)
 
+		# X axis Log
 		xlog = xaxis_type == "Log"
+
+		# Y axis Log
 		ylog = yaxis_type == "Log"
 
+		# Create query to find the associated values under the respected X and Y column names
 		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}}
+
+		# Search for the data
 		ztf_scatter = ztf.find(
 			filter_query
 		)
 
+		# Put the resulting data into a dataframe
 		df = pd.DataFrame(ztf_scatter)
 
+		# Create a scatter plot figure with the X and Y values
 		fig = px.scatter(df,
 				x = xaxis_column_name, y = yaxis_column_name,
 				hover_name = 'ssnamenr',
 				hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
-				log_x = xlog, log_y = ylog)
+				log_x = xlog, log_y = ylog
+				)
 
+		# Update the X axis
 		fig.update_xaxes(title=xaxis_column_name)
+
+		# Update the Y axis
 		fig.update_yaxes(title=yaxis_column_name)
+
+		# Create a faster, more dynamic plot that only renders 1000 data points at a time
 		plot = DynamicPlot(fig, max_points=1000)
 
+		# Update the plot
 		updateLayout(fig)
+
+		# Set n_clicks back to 0
 		n_clicks = 0
+
+		# Return the plot
 		return plot.fig
+
+	# If the range button dd not trigger the callback
 	else:
-		n_clicks = 0
+
+		# Prevent the callback from firing
 		raise PreventUpdate
 
+
+
+##########################################################################################################
+#   This function updates the ssnamenr asteroid scatter plot 
+#
+#       Output: Scatter plot
+#       Input: X and Y values, and a url hash
+##########################################################################################################
 @app.callback(
 	Output('scatter_ast', 'figure'),
 	Input('xaxis_ast', 'value'),
 	Input('yaxis_ast', 'value'),
 	Input('url', 'hash'))
 def update_scatter_asteroid(xaxis_ast, yaxis_ast, hash):
+
+	# Check if the url hash is a ZTF value
 	if(hash.startswith("#ZTF")):
+
+		# Prevent the callback from firing
 		raise PreventUpdate
+
+	# Create a query to search for an ssnamenr 	
 	filter_query = { "ssnamenr": int(hash[1:]) }
-	#ztf_query = { "ssnamenr": 1, xaxis_ast: 1, yaxis_ast: 1 }
+
+	# Search for the ssnamenr
 	scatter_mong = ztf.find(
 		filter_query
 	)
 
+	# Put the resulting data into a dataframe
 	df = pd.DataFrame(scatter_mong)
-	fig = px.scatter(df, xaxis_ast, yaxis_ast, hover_name = 'id')
 
-	fig.update_xaxes(title=xaxis_ast)
-	fig.update_yaxes(title=yaxis_ast)
+	# Create a scatter plot figure with the X and Y values
+	plot = px.scatter(df, xaxis_ast, yaxis_ast, hover_name = 'id')
 
-	updateLayout(fig)
-	return fig
+	# Update the X axis
+	plot.update_xaxes(title=xaxis_ast)
 
+	# Update the Y axis
+	plot.update_yaxes(title=yaxis_ast)
+
+	# Update the plot
+	updateLayout(plot)
+
+	# Return the plot
+	return plot
+
+
+
+##########################################################################################################
+#   This function creates a link for an asteroid after clicking on a data point in the scatter plot
+#
+#       Output: Link to asteroid observation
+#       Input: Scatter Plot clickData
+##########################################################################################################
+@app.callback(
+	Output('click-data', 'children'),
+	Input('scatter', 'clickData')
+)
+def click_scatter(clickData):
+
+	# Check if a data point was clicked on
+	if(clickData != None):
+
+		# Store the data from the clicked data point
+		click_data = clickData['points'][0]['hovertext']
+
+		# Create a link to visit the asteroid with the data value ssnamenr
+		ssnamenr_link = dcc.Link(html.Button(id='scatter_button', n_clicks=0, children=f'Go to {click_data}', style={"margin-top":"10px", "margin-left":"10px"}), href = f'/snaps-dev/asteroid#{click_data}')
+
+		# Return the link
+		return ssnamenr_link
+
+	# If a data point was not clicked
+	else:
+
+		# Prevent the callback from firing
+		raise PreventUpdate
+
+
+
+# get the max and min values of each attributes in the dataframe. Display these
+# bounds in a table on the scatter plot page.
+#def get_maxmin_scatter():
+#	maxmin_search = ztf.aggregate([
+#	    { "$group": {
+#	        "_id": None,
+#	        "max": { "$max": "$$attribute"},
+#	        "min": { "$min": "$$attribute"}
+#	    }}
+#	])
+#	maxmin_result = pd.DataFrame(maxmin_search)
+
+
+
+##########################################################################################################
+#   This function creates a link for an asteroid observation after clicking on a data point in the scatter plot
+#
+#       Output: Link to asteroid observation
+#       Input: Scatter Plot clickData
+##########################################################################################################
 @app.callback(
 	Output('click-data-ast', 'children'),
 	Input('scatter_ast', 'clickData')
 )
 def click_scatter_ast(clickData):
+
+	# Check if a data point was clicked on
 	if(clickData != None):
+
+		# Store the data from the clicked data point
 		click_data = clickData['points'][0]['hovertext']
-		goto = html.H2(dcc.Link(html.A(f'Go to {click_data}'), href = f'/snaps-dev/observation#{click_data}'))
-		return goto
+
+		# Create a link to visit the individual asteroid 
+		observation_link = dcc.Link(html.Button(id='scatter_ast_button', n_clicks=0, children=f'Go to {click_data}', style={"margin-top":"10px", "margin-left":"10px"}), href = f'/snaps-dev/observation#{click_data}')
+
+		# Return the link
+		return observation_link
+
+	# If a data point was not clicked
 	else:
+
+		# Prevnt the callback from firing
 		raise PreventUpdate
 
+
+
+
+
+####################################################################################################################################################
+#	User-related functions 
+####################################################################################################################################################
+
+
+
+# Search Bar Callback, Prevents intial firing of callback before a value is inputted
 @app.callback(
-	Output('heatmap', 'figure'),
-	Input('xaxis-column', 'value'),
-	Input('yaxis-column', 'value'))
-def update_heatmap(xaxis_column_name, yaxis_column_name):
-	filter_query = {"sigmapsf": {"$gte": 0.15, "$lte": 0.35}, "magpsf": {"$gte": 8, "$lte": 15}}
-	ztf_query = {xaxis_column_name: 1, yaxis_column_name: 1}
-	ztf_heat = ztf.find(
-		filter_query,
-		ztf_query)
+	Output("url", "href"),
+	[Input("ast-search-button", "n_clicks")],
+	[Input("search-field", "value")],
+	prevent_initial_call=True
+)
+def asteroid_search_bar(n_clicks, value):
 
-	df = pd.DataFrame(ztf_heat, columns=(xaxis_column_name, yaxis_column_name))
+	# If the button was clicked, continue 
+	if n_clicks > 0:
 
-	fig = px.density_heatmap(df, x = xaxis_column_name, y = yaxis_column_name,
-							nbinsx = 25, nbinsy = 25, text_auto = False)
+		# If the value inputted was an observation
+		if(value.startswith("ZTF")):
 
-	fig.update_xaxes(title=xaxis_column_name)
-	fig.update_yaxes(title=yaxis_column_name)
+			# Return the obsrvation page
+			return f"/snaps-dev/observation#{value}"
+		else:
+			# Still need to implement catch for anything other than a number
+			# being typed in. Sometimes the search bar jumps the gun and executes
+			# before button is it. Need to fix this.
+			#if(isinstance(value, str)):
+			#	return dash.no_update
 
-	updateLayout(fig)
-	return fig
+			# Queries to see if ssnamenr exists. Does not currently throw message
+			# to user saying "doesn't exist".
 
-# Login functionality
+			# Cast thee input value to an integer
+			value = int(value)
+
+			# If the input value is not a valid i.e. less than zero
+			if(value < 0):
+
+				# Prevent the callback from firing
+				raise PreventUpdate
+
+			# If the value is valid, create a dict pair to search for the ssnamenr value	
+			filter_query = { "ssnamenr": value }
+
+			# Serch for the ssnamenr value in the ZTF table
+			scatter_mong = ztf.find(
+				filter_query
+			)
+
+			# Put all values into a dataframe
+			ssnamenr_df = pd.DataFrame(scatter_mong)
+
+			# If the search returns an empty dataframe
+			if(len(ssnamenr_df) == 0):
+
+				# Prevent the callback from firing 
+				raise PreventUpdate
+
+			# Search returns a non-empty dataframe
+			else:
+
+				# Return the associated ssnamenr page
+				return f"/snaps-dev/asteroid#{value}"
+
+
+
+# Callback for ssnamenr scatter plot page to display the observation count
+@app.callback(
+    Output('ssnamenr_data', 'children'),
+    Input('url', 'hash')
+)
+def ssnamenr_data(hash):
+
+	# Take out the # from the ssnamenr value input
+    hash = hash.replace("#", "")
+
+    # Create a dict pair to search for the ssnamenr value
+    filter_query = { "ssnamenr": hash }
+
+    # Search for the ssnamenr value in the asteroids table
+    searched = derived.find(
+        filter_query
+    )
+
+    # Put all values into dataframe
+    original_df = pd.DataFrame(searched)
+
+    # Pull out the value of observationCounts
+    counts = original_df["observationCounts"]
+
+    # Create a string with the observation counts value
+    observation_string = f'Observation Count: {counts.iloc[0]}'
+
+    # Return the html object with the observation counts to the scatter plot page
+    return html.H3(observation_string)
+
+
+
+# Callback for displaying individual observation data for analysis
+@app.callback(
+	Output('observation', 'children'),
+	Input('url', 'hash')
+)
+def observation_page(hash):
+
+	# Check if the value inputted was an observation
+	if(hash.startswith("#ZTF")):
+
+		# Take out # from the input
+		hash = hash.replace("#", "")
+
+		# Create a dict pair to search for the ZTF value
+		filter_query = { "id": hash }
+
+		# Serch for the ZTF value in the ZTF table
+		searched = ztf.find(
+			filter_query
+		)
+
+		# Create a dataframe with the found value
+		original_df = pd.DataFrame(searched)
+
+		# Transpose the dataframe so that it is verticala and not horizontal
+		original_df = original_df.transpose()
+
+		# Create an empty list to put items in dict format
+		dict_list = []
+
+		# need to fix this line, maybe df.items
+		## For each index and row value
+		for index, row in original_df.itertuples():
+
+			# Create a pair value from the index and row
+			dict_data = (str(index), str(row))
+
+			# Append the pair value to the dict list
+			dict_list.append(dict_data)
+
+		# Cast the dict list to a dictionary
+		df_dict = dict(dict_list)
+
+		# Create a new dataframe from the dict list dictionary
+		transposed_df = pd.DataFrame.from_dict(df_dict, orient='index')
+
+		# Reset the indicies
+		transposed_df = transposed_df.reset_index()
+
+		# Create the column names for the dataframe
+		transposed_df.columns = ['Attribute','Value']
+
+		# Create columns for the datatable
+		columns = [{"name": i, "id": i} for i in transposed_df.columns]
+
+		# Create a new dataframe to be treated like records and thus as  a Attribute - Value pairing
+		dataframe = transposed_df.to_dict('records')
+
+		# Create and return the datatable
+		return html.Div([html.H3(f"Observation {hash}",style={'color':'#AFEEEE'}), html.Br(), dt.DataTable(data=dataframe, columns = columns, style_as_list_view=True, style_header={'textAlign': 'center', 'border':'1px rgb(10, 41, 122)', 'backgroundColor': 'transparent','fontWeight': 'bold', 'color':'#AFEEEE'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'border':'none','fontWeight':'bold','color':'black', 'backgroundColor': 'rgba(255,255,255,0.5)', 'paddingLeft': '25px', 'paddingTop': '20px', 'textAlign':'center'}, export_format='csv')])
+
+
+
+##########################################################################################################
+#   This function creates a user account using a username, password, and email; and inserts thee user into
+# 	the "users" SQLite database 
+#
+#       Output: Into a Div with the ID 'create_user'
+#       Input: The n_clicks value entered into the signup button when clicked
+#       State: Username, Password, Email
+##########################################################################################################
 @app.callback(
 	[Output('create_user', "children")],
 	[Input('signup_button', 'n_clicks')],
@@ -708,7 +1034,6 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
 	prevent_initial_call=True,
 )
 def insert_users(n_clicks, un, pw, cpw, em):
-
 	# Hash the password
 	hashed_password = generate_password_hash(pw, method='sha256')
 
@@ -781,6 +1106,15 @@ def insert_users(n_clicks, un, pw, cpw, em):
 		return [dbc.Alert('A field is empty', color="danger")]
 
 
+
+##########################################################################################################
+#   This function saves the current asteroid to a list corresponding to the logged in user for display in
+#	the account page
+#
+#       Output: Into a Div with the ID 'save-output'
+#       Input: The n_clicks value entered into the save asteroid button when clicked
+#       State: Saves the url hash
+##########################################################################################################
 @app.callback(
 	Output('save-output', 'children'),
 	Input('save-button', 'n_clicks'),
@@ -815,8 +1149,10 @@ def save_asteroid(n_clicks, hash):
 			return [html.Br(), dbc.Alert('You must be logged in to save asteroids!', color="danger")]
 
 
+
 ##########################################################################################################
 #   This function uses the input username to query the database for all asteroids that correspond to it
+#	and display the asteroids in a table
 #
 #       Output: Into a Div with the ID 'selection'
 #       Input: The username value entered into the select button when clicked
@@ -828,8 +1164,10 @@ def save_asteroid(n_clicks, hash):
 )
 def displayUserData(n_clicks):
 
+	# Check if the display asteroids button was clicked
 	if(n_clicks > 0):
-		# Query that elects the asteroid_id column values where the username column values match the inputted
+
+		# Query that selects the asteroid_id column values where the username column values match the inputted
 		# username
 		un = current_user.username
 		query = select(UserData_tbl.c.asteroid_id).where(UserData_tbl.c.username == un)
@@ -844,6 +1182,8 @@ def displayUserData(n_clicks):
 
 			# There was an error
 			except Exception as e:
+
+					# Print the error
 					print(e)
 
 			# The query executed
@@ -870,6 +1210,7 @@ def displayUserData(n_clicks):
 					# Append the JSON string while taking out the square brackets [ ] and quotes " " around
 					# the data
 					json_list.append(jsonString.replace("[", "").replace("]", "").replace('"', ""))
+
 				# Disconnect from the database
 				result.close()
 
@@ -882,13 +1223,7 @@ def displayUserData(n_clicks):
 				# Loop through each value in the Array
 				for value in clean_up:
 
-					## check if it is an ssnamnr or ZTF object
-
-					##
-
-					##
-
-					# reformat the value to be an HTML link using an f string with HTML code and the value
+					# Reformat the value to be an HTML link using an f string with HTML code and the value
 					value = f"<a href='/snaps-dev/asteroid#{value}'>{value}</a>"
 
 					# Append the link into the link list
@@ -908,10 +1243,17 @@ def displayUserData(n_clicks):
 				data_array = df.to_dict('records')
 
 				# Return a Dash Datatable with the data centered
-				return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'minWidth': '100px', 'width': '100px', 'maxWidth': '100px'}, style_data={'paddingLeft': '25px', 'paddingTop': '20px'}, markdown_options={"html": True})
+				return dt.DataTable(data=data_array, columns=columns, style_header={'textAlign': 'center'}, style_table={'width':'110px'}, style_data_conditional=[{'if': {'column_id': 'SSNAMENR',},'textAlign': 'center', 'padding-left': '27px', 'padding-top': '15px'}], markdown_options={"html": True})
 
 
-# Callback for logging in
+
+##########################################################################################################
+#   This function is used to login the user 
+#
+#       Output: Into a Div with the ID 'login_output'
+#       Input: The button n_clicks value entered into the logout button when clicked
+#       State: Saved username and password from the input
+##########################################################################################################
 @app.callback(
 	Output('login_output', 'children'), [Input('login-button', 'n_clicks')],
 	[State('uname-box', 'value'), State('pwd-box', 'value')])
@@ -938,14 +1280,37 @@ def login_to_account(n_clicks, input1, input2):
 			return [html.Br(), dbc.Alert('Username Doesn\'t Exist', color="danger")]
 
 
-# Callback for logout
+
+##########################################################################################################
+#   This function is used to logout the user
+#
+#       Output: Into a Div with the ID 'url_logout'
+#       Input: The n_clicks value entered into the login button when clicked
+##########################################################################################################
 @app.callback(
-	Output('url_logout', 'children'), [Input('logout_button', 'n_clicks')])
+	Output('url_logout', 'children'),
+   [Input('logout_button', 'n_clicks')],
+   prevent_initial_call=True)
 def logout_of_account(n_clicks):
+
+	# Check if the logout button was clicked
 	if n_clicks > 0:
-		logout_user()
-		return dcc.Location(pathname="/snaps-dev/", id="home-link")
+
+		# Check if the user is already logged in
+		if current_user.is_authenticated:
+
+			# Log out the user
+			logout_user()
+
+			# Return to the home pagee
+			return dcc.Location(pathname="/snaps-dev/", id="home-link")
+
+		# If the user was not logged in
+		else:
+
+			# Prevent the callback from firing
+			raise PreventUpdate
 
 
 if __name__ == '__main__':
-	app.run_server(host='127.0.0.1', port=8050, debug=True)
+	app.run_server(host='127.0.0.1', port=8050, debug=False)
