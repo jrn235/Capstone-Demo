@@ -15,6 +15,7 @@ import pandas as pd
 import pymongo
 import sqlite3
 from lenspy import DynamicPlot
+import time
 
 # Login Dependencies
 # Manage database and users
@@ -105,11 +106,11 @@ users_db = SQLAlchemy()
 config = configparser.ConfigParser()
 
 # Create Users Class for interacting with users table
-class Users(users.db.Model):
-	id = users.db.Column(db.Integer, primary_key=True)
-	username = users.db.Column(db.String(15), unique=True, nullable=False)
-	email = users.db.Column(db.String(50), unique=True)
-	password = users.db.Column(db.String(80))
+class Users(users_db.Model):
+	id = users_db.Column(users_db.Integer, primary_key=True)
+	username = users_db.Column(users_db.String(15), unique=True, nullable=False)
+	email = users_db.Column(users_db.String(50), unique=True)
+	password = users_db.Column(users_db.String(80))
 Users_tbl = Table('users', Users.metadata)
 
 # Create users table within SQLite database
@@ -126,7 +127,7 @@ server.config.update(
 )
 
 # Initialize users database server
-users.db.init_app(server)
+users_db.init_app(server)
 
 # Create login instance from Flask
 login_manager = LoginManager()
@@ -372,6 +373,13 @@ scatterplot_page = html.Div([
 					html.H3("Change attributes from dropdown to update scatter plot."),
 					], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 				),
+
+				html.Div([
+					html.Table([
+						html.Tr([html.Td("Query took: "), html.Td(id = "query_time"), html.Td("seconds")]),
+						html.Tr([html.Td("Graphing took: "), html.Td(id = "graph_time"), html.Td("seconds")])
+					], style={'color':'#AFEEEE', 'margin-left':'500px', "margin-top":"50px"}),
+				]),
 
 				html.Div(id="scatter_maxmin_table", children=[]),
 				html.Div([
@@ -646,6 +654,8 @@ def update_heatmap(xaxis_column_name, yaxis_column_name):
 ##########################################################################################################
 @app.callback(
 	Output('scatter', 'figure'),
+	Output('graph_time', 'children'),
+	Output('query_time', 'children'),
 	Input('range_button', 'n_clicks'),
 	Input('scatter-xaxis-column', 'value'),
 	Input('scatter-yaxis-column', 'value'),
@@ -664,9 +674,6 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 
 	# Check if the range button triggerd the callback
 	if 'range_button' in changed_id:
-		# Larger query
-		# {"sigmapsf": {"$gte": 0.15, "$lte": 0.3}, "magpsf": {"$gte": 9, "$lte": 14}}
-
 		# Lower bound for X axis
 		x_low = float(x_low)
 
@@ -688,6 +695,8 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		# Create query to find the associated values under the respected X and Y column names
 		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}}
 
+		# Start time for db lookup
+		query_start = time.time()
 		# Search for the data
 		ztf_scatter = ztf.find(
 			filter_query
@@ -696,6 +705,11 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		# Put the resulting data into a dataframe
 		df = pd.DataFrame(ztf_scatter)
 
+		# End time for db lookup
+		query_end = time.time()
+
+		# Start time for creating scatter plot
+		scatter_start = time.time()
 		# Create a scatter plot figure with the X and Y values
 		fig = px.scatter(df,
 				x = xaxis_column_name, y = yaxis_column_name,
@@ -710,17 +724,22 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		# Update the Y axis
 		fig.update_yaxes(title=yaxis_column_name)
 
-		# Create a faster, more dynamic plot that only renders 1000 data points at a time
-		plot = DynamicPlot(fig, max_points=1000)
+		# Create a faster, more dynamic plot that only renders 10000 data points at a time
+		plot = DynamicPlot(fig, max_points=10000)
 
 		# Update the plot
 		updateLayout(fig)
+		scatter_end = time.time()
 
 		# Set n_clicks back to 0
 		n_clicks = 0
 
-		# Return the plot
-		return plot.fig
+		# Calculate time taken
+		query_time = query_end - query_start
+		scatter_time = scatter_end - scatter_start
+		
+		# Return the plot and times
+		return plot.fig, round(scatter_time, 4), round(query_time, 4)
 
 	# If the range button dd not trigger the callback
 	else:
