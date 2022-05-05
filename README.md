@@ -1,10 +1,13 @@
 # First Light
 
-Currently requires the pub_good_ztf_smallbodies.db sqlite file, placed in the same directory as the app.py file
+Requires the file constring.py that includes a string named con_string that contains the connection string to the ZTF database.
 
-The server can take a minute to start running, but once the server is running and assets are generated, the PyPlot based server loads nearly instantanously
+Container is built using PodMan on NAU ITS servers. Building containers on other systems may require adjustment to the Containerfile.
 
-To run:
+To Run Locally:
 
     python app.py
 
+To Build Container:
+
+    podman run --name appcontainer -d -p 9010:9010 appimage

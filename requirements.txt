@@ -1,0 +1,16 @@
+dash                        >= 2.0.0
+dash_bootstrap_components   == 1.0.2
+dash_core_components        == 2.0.0
+dash_html_components        == 2.0.0
+dash_table                  == 5.0.0
+plotly                      >= 5.6.0
+pandas                      >= 1.4.0
+Flask                       == 2.0.2
+Flask_SQLAlchemy            >= 2.5.1
+pandas                      == 1.4.0
+numpy                       >= 1.19.2
+lenspy                      == 1.1.0
+pymongo                     == 4.0.2
+Werkzeug                    == 2.0.3
+SQLAlchemy                  == 1.4.32
+flask-login                 == 0.5.0

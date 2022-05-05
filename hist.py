@@ -54,7 +54,7 @@ df_gr = pd.DataFrame(gr_color)
 
 gr_color_hist = sns.histplot(x = "grColor", data = df_gr, bins = 200)
 gr_color_hist.set_xlabel("g-r Color")
-gr_color_hist.set_ylabel("Count")
+gr_color_hist.set_ylabel("Number of Objects")
 fig = gr_color_hist.get_figure()
 fig.savefig("grColor_hist.png", dpi = 300)
 fig.clf()
