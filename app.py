@@ -2,6 +2,7 @@
 #	Python Library Dependencies
 ####################################################################################################################################################
 
+from types import NoneType
 import dash
 from dash import dcc, html, dash_table
 import dash_bootstrap_components as dbc
@@ -54,7 +55,7 @@ from constring import *
 
 #app = dash.Dash(__name__, requests_pathname_prefix='/snaps/', external_stylesheets=[dbc.themes.FLATLY])
 # Create Dash instance
-app = dash.Dash(__name__, requests_pathname_prefix='/snaps/', external_stylesheets=[dbc.themes.FLATLY], title='SNAPS')
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], title='SNAPS')
 
 # Create server instance
 server = app.server
@@ -148,7 +149,7 @@ entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf',
 	'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr',
 	'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID', 'ltc']
 
-
+night_range = ztf.distinct("night")
 
 
 
@@ -371,6 +372,17 @@ scatterplot_page = html.Div([
 		], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 	),
 
+	html.Div([
+		dcc.Input(id='year', placeholder='Year'),
+		dcc.Input(id='month', placeholder='Month'),
+		dcc.Input(id='day', placeholder='Day'), 
+		], style={'margin-top': '25px'},
+	),
+
+	html.Div(
+		id="valid_night",
+		style={"width": "400px", "height": "75px", "margin": 'auto'}
+	),
 	
 	html.Div([
 		dcc.Dropdown(
@@ -700,6 +712,7 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 ##########################################################################################################
 @app.callback(
 	Output('scatter', 'figure'),
+	Output('valid_night', 'children'),
 	Input('range_button', 'n_clicks'),
 	Input('scatter-xaxis-column', 'value'),
 	Input('scatter-yaxis-column', 'value'),
@@ -709,9 +722,25 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 	Input('x_upper_scatter', 'value'),
 	Input('y_lower_scatter', 'value'),
 	Input('y_upper_scatter', 'value'),
+	Input('year', 'value'),
+	Input('month', 'value'),
+	Input('day', 'value'),
 	prevent_initial_call = True
 	)
-def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up):
+def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up, year, month, day):
+
+	# Build the night the user selects
+	night = int(year + month + day)
+
+	# If night is not in database, do not update graph, will consider adding an alert to user that the night is not in the database
+	if night not in night_range:
+		fig = px.scatter(None)
+		updateLayout(fig)
+		return fig, dbc.Alert(f'{year}-{month}-{day} Not In Database Currently', color="danger")
+	else:
+		fig = px.scatter(None)
+		updateLayout(fig)
+		return fig, None
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
@@ -740,11 +769,12 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		ylog = yaxis_type == "Log"
 
 		# Create query to find the associated values under the respected X and Y column names
-		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}}
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}, "night": night}
 
 		# Search for the data
 		ztf_scatter = ztf.find(
-			filter_query
+			filter_query,
+			{xaxis_column_name: 1, yaxis_column_name: 1, "ssnamenr": 1}
 		)
 
 		# Put the resulting data into a dataframe
@@ -765,7 +795,7 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		fig.update_yaxes(title=yaxis_column_name)
 
 		# Create a faster, more dynamic plot that only renders 100000 data points at a time
-		plot = DynamicPlot(fig, max_points=100000)
+		# plot = DynamicPlot(fig, max_points=100000)
 
 		# Update the plot
 		updateLayout(fig)
@@ -777,7 +807,7 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		del df
 
 		# Return the plot
-		return plot.fig
+		return fig, None
 
 	# If the range button dd not trigger the callback
 	else:
@@ -1359,4 +1389,4 @@ def logout_of_account(n_clicks):
 
 
 if __name__ == '__main__':
-	app.run_server(host='0.0.0.0', port=9010, debug=False)
+	app.run_server(host='127.0.0.1', port=8050, debug=False)
