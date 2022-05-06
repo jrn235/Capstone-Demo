@@ -372,16 +372,16 @@ scatterplot_page = html.Div([
 		], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 	),
 
+	html.Div(
+		id="valid_night_scatter",
+		style={"width": "400px", "height": "75px", "margin": 'auto'}
+	),
+
 	html.Div([
 		dcc.Input(id='year', placeholder='Year'),
 		dcc.Input(id='month', placeholder='Month'),
 		dcc.Input(id='day', placeholder='Day'), 
 		], style={'margin-top': '25px'},
-	),
-
-	html.Div(
-		id="valid_night",
-		style={"width": "400px", "height": "75px", "margin": 'auto'}
 	),
 	
 	html.Div([
@@ -443,6 +443,19 @@ heatmap_page = html.Div([
 		html.H3("Change attributes from dropdown to update heat map.")
 		], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 	),
+
+	html.Div(
+		id="valid_night_heatmap",
+		style={"width": "400px", "height": "75px", "margin": 'auto'}
+	),
+
+	html.Div([
+		dcc.Input(id='year', placeholder='Year'),
+		dcc.Input(id='month', placeholder='Month'),
+		dcc.Input(id='day', placeholder='Day'), 
+		], style={'margin-top': '25px'},
+	),
+
 	html.Div([
 		dcc.Dropdown(
 			options = [{'label': i, 'value': i } for i in entireDF],
@@ -634,6 +647,7 @@ def updateLayout(graphFig):
 ##########################################################################################################
 @app.callback(
 	Output('heatmap', 'figure'),
+	Output('valid_night_heatmap', 'children'),
 	Input('range_button_heatmap', 'n_clicks'),
 	Input('xaxis-column', 'value'),
 	Input('yaxis-column', 'value'),
@@ -641,14 +655,24 @@ def updateLayout(graphFig):
 	Input('x_upper_heatmap', 'value'),
 	Input('y_lower_heatmap', 'value'),
 	Input('y_upper_heatmap', 'value'),
+	Input('year', 'value'),
+	Input('month', 'value'),
+	Input('day', 'value'),
 	)
-def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up):
+def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up, year, month, day):
+
+	# Create night integer
+	night = int(year + month + day)
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
 	# Check if the range button triggerd the callback
 	if 'range_button' in changed_id:
+
+		if night not in night_range:
+			plot = px.density_heatmap(None)
+			return plot, dbc.Alert(f'{year}-{month}-{day} Not In Database Currently', color="danger")
 
 		# Lower bound for X axis
 		x_low = float(x_low)
@@ -663,11 +687,12 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 		y_up = float(y_up)
 
 		# Create query to find the associated values under the respected X and Y column names
-		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}}
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}, "night": night}
 
 		# Search for the data
 		ztf_heatmap = ztf.find(
-			filter_query
+			filter_query,
+			{xaxis_column_name: 1, yaxis_column_name: 1}
 		)
 
 		# Put the resulting data into a dataframe
@@ -712,7 +737,7 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 ##########################################################################################################
 @app.callback(
 	Output('scatter', 'figure'),
-	Output('valid_night', 'children'),
+	Output('valid_night_scatter', 'children'),
 	Input('range_button', 'n_clicks'),
 	Input('scatter-xaxis-column', 'value'),
 	Input('scatter-yaxis-column', 'value'),
@@ -732,23 +757,16 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 	# Build the night the user selects
 	night = int(year + month + day)
 
-	# If night is not in database, do not update graph, will consider adding an alert to user that the night is not in the database
-	if night not in night_range:
-		fig = px.scatter(None)
-		updateLayout(fig)
-		return fig, dbc.Alert(f'{year}-{month}-{day} Not In Database Currently', color="danger")
-	else:
-		fig = px.scatter(None)
-		updateLayout(fig)
-		return fig, None
-
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
 	# Check if the range button triggerd the callback
 	if 'range_button' in changed_id:
-		# Larger query
-		# {"sigmapsf": {"$gte": 0.15, "$lte": 0.3}, "magpsf": {"$gte": 9, "$lte": 14}}
+		# If night is not in database, do not update graph, will consider adding an alert to user that the night is not in the database
+		if night not in night_range:
+			fig = px.scatter(None)
+			updateLayout(fig)
+			return fig, dbc.Alert(f'{year}-{month}-{day} Not In Database Currently', color="danger")
 
 		# Lower bound for X axis
 		x_low = float(x_low)
@@ -1389,4 +1407,4 @@ def logout_of_account(n_clicks):
 
 
 if __name__ == '__main__':
-	app.run_server(host='127.0.0.1', port=8050, debug=False)
+	app.run_server(host='127.0.0.1', port=8050, debug=True)
