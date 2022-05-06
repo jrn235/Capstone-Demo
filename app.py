@@ -12,7 +12,6 @@ import plotly.express as px
 import pandas as pd
 import pymongo
 import sqlite3
-from lenspy import DynamicPlot
 
 # Login Dependencies
 # Manage database and users
@@ -662,7 +661,10 @@ def updateLayout(graphFig):
 def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up, year, month, day):
 
 	# Create night integer
-	night = int(year + month + day)
+	try:
+		night = int(year + month + day)
+	except:
+		TypeError
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
@@ -718,7 +720,7 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 		del df
 
 		# Return the plot
-		return plot
+		return plot, None
 
 	# If the range button dd not trigger the callback
 	else:
@@ -755,7 +757,10 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up, year, month, day):
 
 	# Build the night the user selects
-	night = int(year + month + day)
+	try:
+		night = int(year + month + day)
+	except:
+		TypeError
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
@@ -811,9 +816,6 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 
 		# Update the Y axis
 		fig.update_yaxes(title=yaxis_column_name)
-
-		# Create a faster, more dynamic plot that only renders 100000 data points at a time
-		# plot = DynamicPlot(fig, max_points=100000)
 
 		# Update the plot
 		updateLayout(fig)
@@ -1407,4 +1409,4 @@ def logout_of_account(n_clicks):
 
 
 if __name__ == '__main__':
-	app.run_server(host='127.0.0.1', port=8050, debug=True)
+	app.run_server(host='127.0.0.1', port=8050, debug=False)
