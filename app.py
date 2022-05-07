@@ -652,7 +652,6 @@ def updateLayout(graphFig):
 ##########################################################################################################
 @app.callback(
 	Output('heatmap', 'figure'),
-	Output('valid_night_heatmap', 'children'),
 	Input('range_button_heatmap', 'n_clicks'),
 	Input('xaxis-column', 'value'),
 	Input('yaxis-column', 'value'),
@@ -740,7 +739,6 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 ##########################################################################################################
 @app.callback(
 	Output('scatter', 'figure'),
-	Output('valid_night_scatter', 'children'),
 	Input('range_button', 'n_clicks'),
 	Input('scatter-xaxis-column', 'value'),
 	Input('scatter-yaxis-column', 'value'),
@@ -788,7 +786,7 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		# Search for the data
 		ztf_scatter = ztf.find(
 			filter_query,
-			{xaxis_column_name: 1, yaxis_column_name: 1, "ssnamenr": 1}
+			{xaxis_column_name: 1, yaxis_column_name: 1, "ssnamenr": 1, "night": 1}
 		)
 
 		# Put the resulting data into a dataframe
@@ -798,7 +796,7 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		fig = px.scatter(df,
 				x = xaxis_column_name, y = yaxis_column_name,
 				hover_name = 'ssnamenr',
-				hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f'},
+				hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f', "night":True},
 				log_x = xlog, log_y = ylog
 				)
 
@@ -818,7 +816,7 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		del df
 
 		# Return the plot
-		return fig, None
+		return fig
 
 	# If the range button dd not trigger the callback
 	else:
