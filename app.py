@@ -146,9 +146,10 @@ def load_user(user_id):
 # Name values for each asteroid attribute
 entireDF = ['jd', 'fid', 'pid', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf',
 	'magap', 'sigmagap', 'magapbig', 'sigmagapbig', 'distnr', 'magnr', 'fwhm', 'elong', 'rb', 'ssdistnr',
-	'ssmagnr', 'id', 'night', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID', 'ltc']
+	'ssmagnr', 'id', 'obsdist', 'phaseangle', 'G', 'H', 'heliodist', 'antaresID', 'ltc']
 
 night_range = ztf.distinct("night")
+night_range.sort(reverse=True)
 
 
 
@@ -365,22 +366,25 @@ home_page = html.Div([
 scatterplot_page = html.Div([
 
 	html.Div([
-		html.H3("Specify X/Y range to build graph from."),
+		html.H3("Specify a Date and an X/Y range to build graph from."),
 		html.Br(),
 		html.H3("Change attributes from dropdown to update scatter plot."),
 		], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 	),
 
-	html.Div(
-		id="valid_night_scatter",
-		style={"width": "400px", "height": "75px", "margin": 'auto'}
-	),
-
 	html.Div([
-		dcc.Input(id='year', placeholder='Year'),
-		dcc.Input(id='month', placeholder='Month'),
-		dcc.Input(id='day', placeholder='Day'), 
-		], style={'margin-top': '25px'},
+		dcc.Dropdown(
+			options = [{'label': i, 'value': i} for i in night_range],
+			id = 'night-lower-scatter',
+			style = {'width': '100px'}
+		),
+		html.H4("Select A Date Range", style={'width': '200px'}),
+		dcc.Dropdown(
+			options = [{'label': i, 'value': i} for i in night_range],
+			id = 'night-upper-scatter',
+			style = {'width': '100px'}
+		)
+		], style={'margin-top': '25px', 'display': 'flex', 'text-align': 'center', 'margin-left': '250px'},
 	),
 	
 	html.Div([
@@ -437,22 +441,25 @@ scatterplot_page = html.Div([
 heatmap_page = html.Div([
 
 	html.Div([
-		html.H3("Specify X/Y range to build graph from."),
+		html.H3("Specify a Date and an X/Y range to build graph from."),
 		html.Br(),
 		html.H3("Change attributes from dropdown to update heat map.")
 		], style={'color':'#AFEEEE', 'margin-left':'150px', "margin-top":"50px"}
 	),
 
-	html.Div(
-		id="valid_night_heatmap",
-		style={"width": "400px", "height": "75px", "margin": 'auto'}
-	),
-
 	html.Div([
-		dcc.Input(id='year', placeholder='Year'),
-		dcc.Input(id='month', placeholder='Month'),
-		dcc.Input(id='day', placeholder='Day'), 
-		], style={'margin-top': '25px'},
+		dcc.Dropdown(
+			options = [{ 'label': i, "value": i } for i in night_range],
+			id = 'night-lower-heatmap',
+			style = {'margin-left':'-100px'}
+		),
+		html.H4('Select Date Range', style={'width': '200px'}),
+		dcc.Dropdown(
+			options = [{ 'label': i, "value": i } for i in night_range],
+			id = 'night-upper-heatmap',
+			style = {'margin-left': '50px', 'width': '200px'}
+		) 
+		], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 	),
 
 	html.Div([
@@ -519,8 +526,7 @@ asteroid_page = html.Div([
 	html.Div([
     	html.Button(id='save-button', children='Save Asteroid', n_clicks=0, style={'float':'left', 'width':'150px', 'margin-top':'-25px', 'margin-left':'100px', 'height':'40px'}),
     	html.Div(id='save-output', children=[], style={'width':'400px', 'margin-left':'100px', 'margin-top':'-55px'}),
-    	], style={'display':'flex', 'width':'900px', 'margin-left':'200px'})
-
+    	], style={'display':'flex', 'width':'900px', 'margin-left':'200px'}),
 	])
 
 
@@ -654,27 +660,20 @@ def updateLayout(graphFig):
 	Input('x_upper_heatmap', 'value'),
 	Input('y_lower_heatmap', 'value'),
 	Input('y_upper_heatmap', 'value'),
-	Input('year', 'value'),
-	Input('month', 'value'),
-	Input('day', 'value'),
+	Input('night-lower-heatmap', 'value'),
+	Input('night-upper-heatmap', 'value'),
 	)
-def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up, year, month, day):
+def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up, night_lower_heatmap, night_upper_heatmap):
 
-	# Create night integer
-	try:
-		night = int(year + month + day)
-	except:
-		TypeError
+	# Check Nightrange
+	if(night_lower_heatmap == NoneType or night_upper_heatmap == NoneType):
+		return PreventUpdate
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
 	# Check if the range button triggerd the callback
 	if 'range_button' in changed_id:
-
-		if night not in night_range:
-			plot = px.density_heatmap(None)
-			return plot, dbc.Alert(f'{year}-{month}-{day} Not In Database Currently', color="danger")
 
 		# Lower bound for X axis
 		x_low = float(x_low)
@@ -689,7 +688,9 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 		y_up = float(y_up)
 
 		# Create query to find the associated values under the respected X and Y column names
-		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}, "night": night}
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, 
+						yaxis_column_name: {"$gte": y_low, "$lte": y_up}, 
+						"night": {"$gte": night_lower_heatmap, "$lte": night_upper_heatmap}}
 
 		# Search for the data
 		ztf_heatmap = ztf.find(
@@ -749,29 +750,17 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 	Input('x_upper_scatter', 'value'),
 	Input('y_lower_scatter', 'value'),
 	Input('y_upper_scatter', 'value'),
-	Input('year', 'value'),
-	Input('month', 'value'),
-	Input('day', 'value'),
+	Input('night-lower-scatter', 'value'),
+	Input('night-upper-scatter', 'value'),
 	prevent_initial_call = True
 	)
-def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up, year, month, day):
-
-	# Build the night the user selects
-	try:
-		night = int(year + month + day)
-	except:
-		TypeError
+def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up, night_lower, night_upper):
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
 
 	# Check if the range button triggerd the callback
 	if 'range_button' in changed_id:
-		# If night is not in database, do not update graph, will consider adding an alert to user that the night is not in the database
-		if night not in night_range:
-			fig = px.scatter(None)
-			updateLayout(fig)
-			return fig, dbc.Alert(f'{year}-{month}-{day} Not In Database Currently', color="danger")
 
 		# Lower bound for X axis
 		x_low = float(x_low)
@@ -792,7 +781,9 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		ylog = yaxis_type == "Log"
 
 		# Create query to find the associated values under the respected X and Y column names
-		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, yaxis_column_name: {"$gte": y_low, "$lte": y_up}, "night": night}
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, 
+						yaxis_column_name: {"$gte": y_low, "$lte": y_up}, 
+						"night": {"$gte": night_lower, "$lte": night_upper}}
 
 		# Search for the data
 		ztf_scatter = ztf.find(
