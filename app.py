@@ -2,7 +2,7 @@
 #	Python Library Dependencies
 ####################################################################################################################################################
 
-from types import NoneType
+
 import dash
 from dash import dcc, html, dash_table
 import dash_bootstrap_components as dbc
@@ -44,6 +44,8 @@ import base64
 # For the MongoDB connection
 from constring import *
 
+# For SQLite Databases connection
+from sqliteCreation import *
 
 
 ####################################################################################################################################################
@@ -75,43 +77,14 @@ derived = client.ztf.asteroids
 # Never print duplicate warnings
 warnings.filterwarnings("ignore")
 
-# Create and connect to the userData SQLite database file
+# Connect to the userData SQLite database file
 user_data_con = sqlite3.connect('userData.sqlite')
-user_data_engine = create_engine('sqlite:///userData.sqlite')
-user_data_db = SQLAlchemy()
 
-# Create the UserData Class for use in SQLAlchemy
-class UserData(user_data_db.Model):
-	id = user_data_db.Column(user_data_db.Integer, primary_key=True)
-	username = user_data_db.Column(user_data_db.String(15), unique=False, nullable=False)
-	asteroid_id = user_data_db.Column(user_data_db.String(50), unique=False)
-UserData_tbl = Table('user_data', UserData.metadata)
-
-# Create the user_data table within the SQLite database
-def create_userData_table():
-	UserData.metadata.create_all(user_data_engine)
-create_userData_table()
-
-# Create and connect to the users SQLite database file
+# Connect to the users SQLite database file
 users_con = sqlite3.connect('users.sqlite')
-users_engine = create_engine('sqlite:///users.sqlite')
-users_db = SQLAlchemy()
 
 # Create a configuration objct for SQLite and SQLAlchemy interaction
 config = configparser.ConfigParser()
-
-# Create Users Class for interacting with users table
-class Users(users_db.Model):
-	id = users_db.Column(users_db.Integer, primary_key=True)
-	username = users_db.Column(users_db.String(15), unique=True, nullable=False)
-	email = users_db.Column(users_db.String(50), unique=True)
-	password = users_db.Column(users_db.String(80))
-Users_tbl = Table('users', Users.metadata)
-
-# Create users table within SQLite database
-def create_users_table():
-	Users.metadata.create_all(users_engine)
-create_users_table()
 
 # Config the server to interact with the database
 # Secret Key is used for user sessions
@@ -352,6 +325,7 @@ encoded_image4 = base64.b64encode(open(image_filename4, 'rb').read())
 
 home_page = html.Div([
 
+	html.Div(html.P("SNAPS is the Solar System Notification Alert Processing System. SNAPS ingests alerts from all-sky surveys such as ZTF and LSST and to produce a database of measured and derived properties for tens of thousands of asteroids. SNAPS is designed to enable a wide range of Solar System science cases, and both individual objects of interest and global properties of asteroids may be extracted from the SNAPS database to inform our understanding of the formation and evolution of the Solar System. SNAPS is supported by the National Science Foundation, NAU's Office of the Vice President for Research, and the Arizona Board of Regents' Regents Innovation Fund (the latter two as applications of the Arizona Technology and Research Initiative Fund, TRIF"), style={"color":"white", "margin-bottom":"30px", 'width':'800px', "margin-left":"200px"}),
 	html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image1.decode()), height='300', width='400'), style={'display':'flex', 'padding-right':'100px', 'float':'left', 'margin-left':'-150px'}),
 	html.Br(),
 	html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image2.decode()), height='300', width='400'), style={'display':'flex', 'padding-left':'50px', 'margin-top':'-23px'}),
@@ -373,12 +347,13 @@ scatterplot_page = html.Div([
 	),
 
 	html.Div([
+		html.H4("From: ", style={'width': '200px'}),
 		dcc.Dropdown(
 			options = [{'label': i, 'value': i} for i in night_range],
 			id = 'night-lower-scatter',
 			style = {'width': '100px'}
 		),
-		html.H4("Select A Date Range", style={'width': '200px'}),
+		html.H4("To: ", style={'width': '200px'}),
 		dcc.Dropdown(
 			options = [{'label': i, 'value': i} for i in night_range],
 			id = 'night-upper-scatter',
@@ -386,36 +361,20 @@ scatterplot_page = html.Div([
 		)
 		], style={'margin-top': '25px', 'display': 'flex', 'text-align': 'center', 'margin-left': '250px'},
 	),
-	
+
 	html.Div([
 		dcc.Dropdown(
 			options = [{'label': i, 'value': i } for i in entireDF],
 			value = 'ra',
 			id = 'scatter-xaxis-column',
-			style={'margin-left':'-100px'}),
-		dcc.RadioItems(
-			options = [
-				{'label': 'Linear', 'value': 'Linear'},
-				{'label': 'Log', 'value': 'Log'}],
-			value = "Linear",
-			id = 'xaxis-type',
-			style={'color':'#AFEEEE', 'margin-left':'-400px'}
-		)], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+			style={'margin-left':'-100px'}),]
 	),
 	html.Div([
 		dcc.Dropdown(
 			options = [{'label': i, 'value': i } for i in entireDF],
 			value = 'dec',
 			id = 'scatter-yaxis-column',
-			style={"width":"200px", "margin-left":"50px"}),
-		dcc.RadioItems(
-			options = [
-				{'label': 'Linear', 'value': 'Linear'},
-				{'label': 'Log', 'value': 'Log'}],
-			value = "Linear",
-			id = 'yaxis-type',
-			style={'color':'#AFEEEE', "margin-left":"100px"}
-		)], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+			style={"width":"200px", "margin-left":"50px"}),]
 	),
 	html.Div([
 		html.Div([
@@ -449,17 +408,17 @@ heatmap_page = html.Div([
 
 	html.Div([
 		dcc.Dropdown(
-			options = [{ 'label': i, "value": i } for i in night_range],
+			options = [{'label': i, 'value': i} for i in night_range],
 			id = 'night-lower-heatmap',
-			style = {'margin-left':'-100px'}
+			style = {'width': '100px'}
 		),
-		html.H4('Select Date Range', style={'width': '200px'}),
+		html.H4("Select A Date Range", style={'width': '200px'}),
 		dcc.Dropdown(
-			options = [{ 'label': i, "value": i } for i in night_range],
+			options = [{'label': i, 'value': i} for i in night_range],
 			id = 'night-upper-heatmap',
-			style = {'margin-left': '50px', 'width': '200px'}
-		) 
-		], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+			style = {'width': '100px'}
+		)
+		], style={'margin-top': '25px', 'display': 'flex', 'text-align': 'center', 'margin-left': '250px'},
 	),
 
 	html.Div([
@@ -467,16 +426,16 @@ heatmap_page = html.Div([
 			options = [{'label': i, 'value': i } for i in entireDF],
 			value = 'ra',
 			id = 'xaxis-column',
-			style={'margin-left':'-100px'})
-		], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+			style={'margin-left':'-100px'}),
+		 ], style={'margin-left':'50px','width':'100px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 	),
 	html.Div([
 		dcc.Dropdown(
 			options = [{'label': i, 'value': i } for i in entireDF],
 			value = 'dec',
 			id = 'yaxis-column',
-			style={"width":"200px", "margin-left":"50px"})
-		], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
+			style={"width":"200px", "margin-left":"50px"}),
+		 ], style={'margin-left':'50px','width':'200px', "margin-top":"50px", 'display': 'inline-block', 'margin-bottom':'20px'}
 	),
 	html.Div([
 		html.Div([
@@ -497,7 +456,7 @@ heatmap_page = html.Div([
 	dcc.Graph(id = "heatmap", style={'width':'1000px', "margin-left":'200px'}),
 	html.Div(
 		html.Pre(id = 'click-data'),
-	)]  )
+	)])
 
 
 asteroid_page = html.Div([
@@ -529,17 +488,22 @@ asteroid_page = html.Div([
     	], style={'display':'flex', 'width':'900px', 'margin-left':'200px'}),
 	])
 
+NAU_image = 'Northern_Arizona_Athletics_wordmark.svg.png'
+encoded_NAU_image = base64.b64encode(open(NAU_image, 'rb').read())
+
+Github_image = 'GitHub-Mark-32px.png'
+encoded_Github_image = base64.b64encode(open(Github_image, 'rb').read())
 
 footer = html.Footer([
 
 	html.Div([
-		html.A([html.Img(src=app.get_asset_url('Northern_Arizona_Athletics_wordmark.svg.png'), style={'display':'flex','height': '2rem'})]),
+		html.A([html.Img(src='data:image/png;base64,{}'.format(encoded_NAU_image.decode()), style={'display':'flex','height': '2rem'})]),
 		html.Div("Created by Team First Light 2022", id='footer-text', style={'margin-left':'20px'}),
 
 		], style={'float':'left', 'padding-left':'30px','display':'flex'}),
 
     html.Div([
-    	html.A([html.Img(src=app.get_asset_url('GitHub-Mark-32px.png'), style={'display':'flex','height': '2rem', 'margin-left':'10px',})], href="https://github.com/jrn235/First-Light", target="_blank"),
+    	html.A([html.Img(src='data:image/png;base64,{}'.format(encoded_Github_image.decode()), style={'display':'flex','height': '2rem', 'margin-left':'10px',})], href="https://github.com/jrn235/First-Light", target="_blank"),
     	html.A("Project Description", href="https://www.ceias.nau.edu/cs/CS_Capstone/Projects/F21/Trilling_Gowanlock_capstone2021.pdf", style={'color':'black','margin-left':'10px','display':'flex', "text-decoration": "none"}, target="_blank"),
     	html.A("Team Website", href="https://ceias.nau.edu/capstone/projects/CS/2022/FirstLight/", style={'display':'flex', 'margin-left':'10px','color':'black', "text-decoration": "none"}, target="_blank")
     ], style={'float':'right', 'display':'flex', 'padding-right':'30px', 'padding-bottom':'10px'})
@@ -665,7 +629,7 @@ def updateLayout(graphFig):
 def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up, night_lower_heatmap, night_upper_heatmap):
 
 	# Check Nightrange
-	if(night_lower_heatmap == NoneType or night_upper_heatmap == NoneType):
+	if(night_lower_heatmap == None or night_upper_heatmap == None):
 		return PreventUpdate
 
 	# Gather a list of all props that triggered the callback
@@ -687,8 +651,8 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 		y_up = float(y_up)
 
 		# Create query to find the associated values under the respected X and Y column names
-		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, 
-						yaxis_column_name: {"$gte": y_low, "$lte": y_up}, 
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up},
+						yaxis_column_name: {"$gte": y_low, "$lte": y_up},
 						"night": {"$gte": night_lower_heatmap, "$lte": night_upper_heatmap}}
 
 		# Search for the data
@@ -720,7 +684,7 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 		del df
 
 		# Return the plot
-		return plot, None
+		return plot
 
 	# If the range button dd not trigger the callback
 	else:
@@ -742,8 +706,6 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 	Input('range_button', 'n_clicks'),
 	Input('scatter-xaxis-column', 'value'),
 	Input('scatter-yaxis-column', 'value'),
-	Input('xaxis-type', 'value'),
-	Input('yaxis-type', 'value'),
 	Input('x_lower_scatter', 'value'),
 	Input('x_upper_scatter', 'value'),
 	Input('y_lower_scatter', 'value'),
@@ -752,7 +714,7 @@ def update_heatmap(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, 
 	Input('night-upper-scatter', 'value'),
 	prevent_initial_call = True
 	)
-def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, yaxis_type, x_low, x_up, y_low, y_up, night_lower, night_upper):
+def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, x_low, x_up, y_low, y_up, night_lower, night_upper):
 
 	# Gather a list of all props that triggered the callback
 	changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
@@ -772,15 +734,9 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		# Upper bound for Y axis
 		y_up = float(y_up)
 
-		# X axis Log
-		xlog = xaxis_type == "Log"
-
-		# Y axis Log
-		ylog = yaxis_type == "Log"
-
 		# Create query to find the associated values under the respected X and Y column names
-		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up}, 
-						yaxis_column_name: {"$gte": y_low, "$lte": y_up}, 
+		filter_query = {xaxis_column_name: {"$gte":x_low, "$lte": x_up},
+						yaxis_column_name: {"$gte": y_low, "$lte": y_up},
 						"night": {"$gte": night_lower, "$lte": night_upper}}
 
 		# Search for the data
@@ -796,8 +752,7 @@ def update_scatter(n_clicks, xaxis_column_name, yaxis_column_name, xaxis_type, y
 		fig = px.scatter(df,
 				x = xaxis_column_name, y = yaxis_column_name,
 				hover_name = 'ssnamenr',
-				hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f', "night":True},
-				log_x = xlog, log_y = ylog
+				hover_data={xaxis_column_name:':.3f', yaxis_column_name:':.3f', "night":True}
 				)
 
 		# Update the X axis
@@ -1398,4 +1353,4 @@ def logout_of_account(n_clicks):
 
 
 if __name__ == '__main__':
-	app.run_server(host='127.0.0.1', port=8050, debug=False)
+	app.run_server(host='127.0.0.1', port=8050, debug=True)
